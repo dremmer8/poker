@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Расписной Покер Score Counter</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <!-- Screen 1: Menu (Game not started) -->
+        <div id="menuScreen" class="screen active">
+            <header>
+                <h1>Расписной Покер</h1>
+                <p>Russian Contract Bridge Score Counter</p>
+            </header>
+            
+            <div class="menu-content">
+                <div class="menu-card">
+                    <h2>Добро пожаловать!</h2>
+                    <p>Выберите действие для начала игры:</p>
+                    
+                    <div class="menu-buttons">
+                        <button class="menu-btn primary" onclick="showGameSetup()">
+                            <span class="btn-icon">🎮</span>
+                            <span class="btn-text">Новая игра</span>
+                        </button>
+                        
+                        <button class="menu-btn secondary" onclick="loadSavedGame()">
+                            <span class="btn-icon">📂</span>
+                            <span class="btn-text">Загрузить игру</span>
+                        </button>
+                        
+                        <button class="menu-btn info" onclick="showGameHistory()">
+                            <span class="btn-icon">📊</span>
+                            <span class="btn-text">История игр</span>
+                        </button>
+                        
+                        <button class="menu-btn reset" onclick="resetCurrentGame()">
+                            <span class="btn-icon">🔄</span>
+                            <span class="btn-text">Сбросить игру</span>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="menu-info">
+                    <h3>О игре</h3>
+                    <p>Расписной покер - это карточная игра, основанная на принципах бриджа. Игроки делают ставки на количество взяток, которые они возьмут в каждом раунде.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Screen 2: Game Setup -->
+        <div id="setupScreen" class="screen">
+            <header>
+                <h1>Настройка игры</h1>
+                <p>Настройте параметры игры перед началом</p>
+                <button class="back-btn" onclick="showMenu()">← Назад в меню</button>
+            </header>
+
+            <div class="game-setup">
+                <div class="player-setup">
+                    <h2>Игроки (Players)</h2>
+                    <div class="player-inputs">
+                        <div class="player-input">
+                            <input type="text" id="player1" placeholder="Player 1" value="Player 1">
+                            <button class="remove-player" onclick="removePlayer(this)" style="display: none;">×</button>
+                        </div>
+                        <div class="player-input">
+                            <input type="text" id="player2" placeholder="Player 2" value="Player 2">
+                            <button class="remove-player" onclick="removePlayer(this)" style="display: none;">×</button>
+                        </div>
+                        <div class="player-input">
+                            <input type="text" id="player3" placeholder="Player 3" value="Player 3">
+                            <button class="remove-player" onclick="removePlayer(this)">×</button>
+                        </div>
+                        <div class="player-input">
+                            <input type="text" id="player4" placeholder="Player 4" value="Player 4">
+                            <button class="remove-player" onclick="removePlayer(this)">×</button>
+                        </div>
+                    </div>
+                    <button class="add-player-btn" onclick="addPlayer()">+ Add Player</button>
+                </div>
+
+                <div class="game-settings">
+                    <h2>Настройки игры (Game Settings)</h2>
+                                                                    <div class="setting-group">
+                            <label for="deckSize">Размер колоды (Deck Size):</label>
+                            <select id="deckSize">
+                                <option value="36">36 карт (36 Cards)</option>
+                                <option value="54">54 карт (54 Cards)</option>
+                            </select>
+                        </div>
+                </div>
+                
+                <div class="deck-preparation-tip" id="deckPreparationTip" style="display: none;">
+                    <h2>📋 Подготовка колоды (Deck Preparation)</h2>
+                    <div class="tip-content" id="tipContent">
+                        <!-- Tip content will be populated by JavaScript based on selected deck size -->
+                    </div>
+                </div>
+                
+                <div class="setup-actions">
+                    <button class="start-game-btn" onclick="startGame()">🎯 Начать игру</button>
+                    <button class="edit-stages-btn" onclick="showStagesEdit()">⚙️ Настроить этапы</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Screen 2.5: Stages Edit -->
+        <div id="stagesEditScreen" class="screen">
+            <header>
+                <h1>Настройка этапов игры</h1>
+                <p>Настройте последовательность этапов для вашей игры</p>
+                <button class="back-btn" onclick="showGameSetup()">← Назад к настройке</button>
+            </header>
+
+            <div class="stages-edit">
+                <div class="stages-info">
+                    <h2>Текущие этапы</h2>
+                    <p>Настройте этапы игры. Каждый этап определяет количество карт и раундов.</p>
+                    
+                    <div class="stage-types-info">
+                        <h3>Типы этапов:</h3>
+                        <ul>
+                            <li><strong>golden</strong> - 1 карта (золотой этап)</li>
+                            <li><strong>rising</strong> - увеличивающееся количество карт</li>
+                            <li><strong>full</strong> - максимальное количество карт</li>
+                            <li><strong>decreasing</strong> - уменьшающееся количество карт</li>
+                            <li><strong>blind</strong> - максимальные карты (слепой этап)</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="stages-config">
+                    <h2>Конфигурация этапов</h2>
+                    
+                    <div class="stages-presets">
+                        <h3>Предустановленные конфигурации:</h3>
+                        <div class="preset-buttons">
+                            <button class="preset-btn" onclick="loadPreset('default')">По умолчанию</button>
+                            <button class="preset-btn" onclick="loadPreset('golden')">Только золотые</button>
+                            <button class="preset-btn" onclick="loadPreset('simple')">Простая</button>
+                            <button class="preset-btn" onclick="loadPreset('custom')">Пользовательская</button>
+                        </div>
+                    </div>
+
+                    <div class="stages-editor">
+                        <h3>Редактор этапов:</h3>
+                        <p class="stages-editor-info">Количество раундов рассчитывается автоматически на основе количества игроков и типа этапа.</p>
+                        <div class="stages-list" id="stagesList">
+                            <!-- Stages will be populated by JavaScript -->
+                        </div>
+                        
+                        <div class="stage-actions">
+                            <button class="add-stage-btn" onclick="addStage()">+ Добавить этап</button>
+                            <button class="clear-stages-btn" onclick="clearStages()">Очистить все</button>
+                        </div>
+                    </div>
+
+                    <div class="stages-preview">
+                        <h3>Предварительный просмотр:</h3>
+                        <div class="preview-content" id="stagesPreview">
+                            <!-- Preview will be populated by JavaScript -->
+                        </div>
+                    </div>
+                </div>
+
+                <div class="stages-actions">
+                    <button class="save-stages-btn" onclick="saveStages()">💾 Сохранить этапы</button>
+                    <button class="reset-stages-btn" onclick="resetStages()">🔄 Сбросить к умолчанию</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Screen 3: Bid and Trick Counting -->
+        <div id="countingScreen" class="screen">
+            <header>
+                <h1>Расписной Покер</h1>
+                <p>Раунд <span id="roundDisplay">1</span> - Карт в руке: <span id="cardsDisplay">1</span></p>
+                <div id="phaseIndicator" class="phase-indicator">
+                    <div class="phase-badge bidding-phase active" id="biddingPhaseBadge">
+                        <span class="phase-icon">🎯</span>
+                        <span class="phase-text">Фаза ставок</span>
+                    </div>
+                    <div class="phase-badge tricks-phase" id="tricksPhaseBadge">
+                        <span class="phase-icon">🃏</span>
+                        <span class="phase-text">Фаза взяток</span>
+                    </div>
+                </div>
+                <div id="saveStatus" style="display: none; background-color: #51cf66; color: white; padding: 5px 10px; border-radius: 3px; font-size: 12px; margin-top: 10px;">
+                    💾 Игра сохранена - можно закрыть страницу
+                </div>
+            </header>
+
+            <div class="game-status" id="gameStatus" style="display: none;">
+                <div class="status-indicator locked">
+                    <span>🔒 Игра заблокирована</span>
+                    <small>Количество игроков и размер колоды заблокированы до конца игры</small>
+                </div>
+            </div>
+
+            <!-- Rules Collapsible Section -->
+            <div class="rules-section">
+                <button class="rules-toggle" onclick="toggleRules()">
+                    <span class="rules-icon">📋</span>
+                    <span class="rules-text">Правила текущего раунда</span>
+                    <span class="rules-arrow">▼</span>
+                </button>
+                <div class="rules-content" id="rulesContent" style="display: none;">
+                    <div class="rules-info">
+                        <h3>Правила подсчета очков</h3>
+                        <div id="scoringRulesText"></div>
+                        <div class="round-details">
+                            <p><strong>Раунд:</strong> <span id="roundDisplay3">1</span></p>
+                            <p><strong>Карт в руке:</strong> <span id="cardsDisplay3">1</span></p>
+                            <p><strong>Колода:</strong> <span id="deckDisplay2">36</span> карт</p>
+                            <p><strong>Всего раундов:</strong> <span id="totalRoundsDisplay2">30</span></p>
+                        </div>
+                        <div class="rules-actions">
+                            <button class="help-btn" onclick="showBlindBiddingHelp()" style="background: linear-gradient(135deg, #ff6b6b, #ff8e8e); color: white; border: none; padding: 8px 16px; border-radius: 6px; font-size: 0.9rem; cursor: pointer; margin-top: 10px;">
+                                👁️ Помощь по слепой ставке
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Phase-specific content -->
+            <div class="phase-content">
+                <!-- Bidding Phase -->
+                <div id="biddingPhase" class="phase-section active">
+                    <div class="phase-header">
+                        <h2>🎯 Фаза ставок</h2>
+                        <p>Игроки делают ставки на количество взяток. Игрок справа от раздающего может делать слепую ставку.</p>
+                    </div>
+                    
+                    <!-- Minimalistic Player Grid for Bidding -->
+                    <div class="minimal-scoreboard">
+                        <div class="player-grid" id="biddingPlayerGrid">
+                            <!-- Player tiles will be populated by JavaScript -->
+                        </div>
+                    </div>
+                    
+                                         <div class="phase-controls">
+                         <button class="phase-btn primary" onclick="completeBiddingPhase()">✅ Завершить ставки</button>
+                         <div class="bids-counter-bubble">
+                             <div class="counter-label">СТАВКИ</div>
+                             <div class="counter-value" id="bidsCounter">0</div>
+                             <div class="counter-status" id="bidsStatus">0/1</div>
+                         </div>
+                     </div>
+                </div>
+
+                <!-- Tricks Phase -->
+                <div id="tricksPhase" class="phase-section">
+                    <div class="phase-header">
+                        <h2>🃏 Фаза взяток</h2>
+                        <p>Игроки вводят количество фактически взятых взяток.</p>
+                    </div>
+                    
+                    <!-- Minimalistic Player Grid for Tricks -->
+                    <div class="minimal-scoreboard">
+                        <div class="player-grid" id="tricksPlayerGrid">
+                            <!-- Player tiles will be populated by JavaScript -->
+                        </div>
+                    </div>
+                    
+                    <div class="phase-controls">
+                        <button class="phase-btn primary" onclick="nextRound()">🎯 Следующий раунд</button>
+                        <button class="phase-btn secondary" onclick="showTricksHelp()">📋 Помощь по взяткам</button>
+                        <button class="phase-btn back" onclick="backToBiddingPhase()">← Назад к ставкам</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="game-controls">
+                <button class="show-table-btn" onclick="showGameTable()">Показать таблицу</button>
+                <button class="back-to-menu-btn" onclick="showMenu()">← Назад в меню</button>
+            </div>
+        </div>
+
+        <!-- Screen 4: Game Table -->
+        <div id="tableScreen" class="screen">
+            <header>
+                <h1>Игровая таблица</h1>
+                <p>Полный обзор игры и статистики</p>
+                <button class="back-btn" onclick="showCountingScreen()">← Назад к подсчету</button>
+            </header>
+
+            <div class="game-table">
+                <div class="table-section">
+                    <h2>Текущие очки</h2>
+                    <div class="scores-display" id="scoresDisplay">
+                        <!-- Scores will be populated by JavaScript -->
+                    </div>
+                </div>
+
+                <div class="table-section">
+                    <h2>История раундов</h2>
+                    <div class="rounds-history" id="roundsHistory">
+                        <!-- Round history will be populated by JavaScript -->
+                    </div>
+                </div>
+
+                <div class="table-section">
+                    <h2>Управление игрой</h2>
+                    <div class="table-controls">
+                        <button class="new-game-btn" onclick="newGame()">Новая игра</button>
+                        <button class="reset-btn" onclick="resetGame()">Сброс</button>
+                        <button class="clear-save-btn" onclick="clearSavedGame()" style="background-color: #ff6b6b; color: white;">Очистить сохранение</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Screen 5: Game History -->
+        <div id="historyScreen" class="screen">
+            <header>
+                <h1>История игр</h1>
+                <p>Предыдущие игры и результаты</p>
+                <button class="back-btn" onclick="showMenu()">← Назад в меню</button>
+            </header>
+
+            <div class="game-history">
+                <h2>История игр (Game History)</h2>
+                <div class="history-list" id="gameHistory">
+                    <!-- Game history will be populated by JavaScript -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Screen 6: Game Celebration -->
+        <div id="celebrationScreen" class="screen">
+            <header>
+                <h1>🎉 Игра завершена!</h1>
+                <p>Поздравляем победителя!</p>
+            </header>
+
+            <div class="celebration-content">
+                <div class="winner-section">
+                    <div class="winner-card" id="winnerCard">
+                        <!-- Winner information will be populated by JavaScript -->
+                    </div>
+                </div>
+
+                <div class="final-stats">
+                    <div class="stats-card">
+                        <h3>📊 Финальная статистика</h3>
+                        <div class="final-scores" id="finalScores">
+                            <!-- Final scores will be populated by JavaScript -->
+                        </div>
+                    </div>
+                </div>
+
+                <div class="round-data">
+                    <div class="rounds-card">
+                        <h3>📋 Данные всех раундов</h3>
+                        <div class="rounds-summary" id="roundsSummary">
+                            <!-- Round data will be populated by JavaScript -->
+                        </div>
+                    </div>
+                </div>
+
+                <div class="celebration-actions">
+                    <button class="new-game-celebration-btn" onclick="startNewGameFromCelebration()">🎮 Новая игра</button>
+                    <button class="view-history-btn" onclick="showGameHistory()">📊 История игр</button>
+                    <button class="back-to-menu-celebration-btn" onclick="showMenu()">🏠 Главное меню</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Screen 7: Round Transition -->
+        <div id="transitionScreen" class="screen">
+            <div class="transition-container">
+                <div class="transition-content">
+                    <div class="transition-header">
+                        <div class="header-main">
+                            <div class="header-title">
+                                <h1>🎯 Раунд <span id="transitionRoundNumber">1</span></h1>
+                                <p>Карт в руке: <span id="transitionCardsPerHand">1</span></p>
+                            </div>
+                            <div class="header-controls">
+                                <div class="transition-timer">
+                                    <div class="timer-display">
+                                        <span id="transitionTimer">15</span>
+                                    </div>
+                                    <p>секунд до начала раунда</p>
+                                </div>
+                                <button class="start-round-btn" onclick="startRoundFromTransition()">🎯 Начать раунд</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="transition-info">
+                        <div class="info-section dealer-info">
+                            <h3>🎯 Раздающий</h3>
+                            <div class="dealer-display" id="transitionDealer">Player 1</div>
+                        </div>
+
+                        <div class="info-section players-info">
+                            <h3>👥 Игроки и карты</h3>
+                            <div class="players-cards" id="transitionPlayersCards">
+                                <!-- Player cards will be populated by JavaScript -->
+                            </div>
+                        </div>
+
+                        <div class="info-section previous-round" id="transitionPreviousRound" style="display: none;">
+                            <h3>📊 Результаты предыдущего раунда</h3>
+                            <div class="previous-round-results" id="transitionPreviousResults">
+                                <!-- Previous round results will be populated by JavaScript -->
+                            </div>
+                        </div>
+
+                        <div class="info-section game-stage">
+                            <h3>🎮 Этап игры</h3>
+                            <div class="stage-info" id="transitionStageInfo">
+                                <!-- Stage info will be populated by JavaScript -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html> 
