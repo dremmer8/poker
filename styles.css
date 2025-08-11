@@ -3563,3 +3563,96 @@ select:disabled {
         font-size: 1rem;
     }
 }
+
+/* Firebase Status Indicator Styles */
+.firebase-status {
+    margin-top: 20px;
+    padding: 15px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.status-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #6c757d;
+    transition: background-color 0.3s ease;
+}
+
+.status-indicator.online .status-dot {
+    background: #28a745;
+    box-shadow: 0 0 8px rgba(40, 167, 69, 0.5);
+}
+
+.status-indicator.offline .status-dot {
+    background: #dc3545;
+}
+
+.status-indicator.syncing .status-dot {
+    background: #ffc107;
+    animation: pulse 1.5s infinite;
+}
+
+.status-text {
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.8);
+    font-weight: 500;
+}
+
+.sync-btn {
+    background: #17a2b8;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    width: 100%;
+}
+
+.sync-btn:hover {
+    background: #138496;
+    transform: translateY(-1px);
+}
+
+.sync-btn:disabled {
+    background: #6c757d;
+    cursor: not-allowed;
+    transform: none;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+}
+
+/* Responsive design for Firebase status */
+@media (max-width: 768px) {
+    .firebase-status {
+        margin-top: 15px;
+        padding: 12px;
+    }
+    
+    .status-indicator {
+        margin-bottom: 8px;
+    }
+    
+    .sync-btn {
+        padding: 10px 16px;
+        font-size: 0.9rem;
+    }
+}

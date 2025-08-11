@@ -2,6 +2,7 @@
 let players = [];
 let gameHistory = [];
 let notificationsShown = false; // Track if notifications have been shown for current session
+let firebaseInitialized = false; // Track Firebase initialization status
 let currentGame = {
     startTime: null,
     endTime: null,
@@ -29,6 +30,129 @@ let transitionCountdown = 15;
 
 // Screen management
 let currentScreen = 'menu';
+
+// Firebase initialization and global session management
+function initializeFirebaseApp() {
+    if (typeof initializeFirebase === 'function') {
+        firebaseInitialized = initializeFirebase();
+        updateFirebaseStatus();
+        
+        if (firebaseInitialized) {
+            // Start listening for global game updates
+            startGlobalGameListener();
+        }
+        
+        return firebaseInitialized;
+    } else {
+        console.error('Firebase functions not loaded');
+        return false;
+    }
+}
+
+function updateFirebaseStatus() {
+    const statusIndicator = document.getElementById('statusIndicator');
+    const statusText = document.getElementById('statusText');
+    const syncBtn = document.getElementById('syncBtn');
+    const sessionInfo = document.getElementById('sessionInfo');
+    
+    if (!statusIndicator) return;
+    
+    if (firebaseInitialized) {
+        statusIndicator.className = 'status-indicator online';
+        statusText.textContent = 'Онлайн';
+        if (syncBtn) syncBtn.style.display = 'block';
+        if (sessionInfo) sessionInfo.style.display = 'block';
+    } else {
+        statusIndicator.className = 'status-indicator offline';
+        statusText.textContent = 'Офлайн';
+        if (syncBtn) syncBtn.style.display = 'none';
+        if (sessionInfo) sessionInfo.style.display = 'none';
+    }
+}
+
+function syncWithFirebase() {
+    if (!firebaseInitialized) {
+        alert('Firebase не инициализирован. Проверьте подключение к интернету.');
+        return;
+    }
+    
+    const statusIndicator = document.getElementById('statusIndicator');
+    const syncBtn = document.getElementById('syncBtn');
+    
+    // Show syncing state
+    statusIndicator.className = 'status-indicator syncing';
+    if (syncBtn) syncBtn.disabled = true;
+    
+    // Load current game from global session
+    if (typeof GlobalGameSession !== 'undefined' && GlobalGameSession.loadGame) {
+        GlobalGameSession.loadGame()
+            .then((gameData) => {
+                if (gameData) {
+                    // Restore the game state
+                    restoreGameFromGlobalSession(gameData);
+                    console.log('Game synced from global session');
+                } else {
+                    console.log('No active game in global session');
+                }
+                
+                // Update status back to online
+                statusIndicator.className = 'status-indicator online';
+                if (syncBtn) syncBtn.disabled = false;
+            })
+            .catch((error) => {
+                console.error('Ошибка синхронизации:', error);
+                statusIndicator.className = 'status-indicator offline';
+                if (syncBtn) syncBtn.disabled = false;
+                alert('Ошибка синхронизации с Firebase. Проверьте подключение.');
+            });
+    } else {
+        console.error('GlobalGameSession not available');
+        statusIndicator.className = 'status-indicator offline';
+        if (syncBtn) syncBtn.disabled = false;
+    }
+}
+
+// Start listening for real-time global game updates
+function startGlobalGameListener() {
+    if (typeof GlobalGameSession !== 'undefined' && GlobalGameSession.startListening) {
+        GlobalGameSession.startListening((gameData) => {
+            if (gameData) {
+                // Check if this update came from another device
+                const currentDeviceId = localStorage.getItem('deviceId');
+                if (gameData.deviceId !== currentDeviceId) {
+                    console.log('Game updated from another device, restoring state...');
+                    restoreGameFromGlobalSession(gameData);
+                }
+            }
+        });
+    }
+}
+
+// Restore game state from global session data
+function restoreGameFromGlobalSession(gameData) {
+    try {
+        // Restore basic game state
+        currentGame = gameData;
+        players = gameData.players || [];
+        currentDeckSize = gameData.currentDeckSize || 36;
+        
+        // Ensure required fields exist
+        if (!currentGame.roundResults) currentGame.roundResults = [];
+        if (!currentGame.currentRoundData) currentGame.currentRoundData = null;
+        
+        // Restore UI state
+        restoreUIState();
+        
+        // Update displays
+        updateScoreboard();
+        updateRoundsHistory();
+        updateScoresDisplay();
+        
+        console.log('Game state restored from global session');
+    } catch (error) {
+        console.error('Error restoring game from global session:', error);
+    }
+}
 
 // Screen management functions
 function showScreen(screenId) {
@@ -713,12 +837,12 @@ function updateRoundsHistory() {
 const ROUND_CONFIGS = {
     36: { // 36-card deck configurations
         2: {
-            totalRounds: 42,
+            totalRounds: 40,
             stages: [
                 { rounds: 2, cards: 1 },           // Stage 1: 2 rounds with 1 card
-                { rounds: 17, cards: 'increment' }, // Stage 2: 17 rounds incrementing 2→18
+                { rounds: 16, cards: 'increment' }, // Stage 2: 16 rounds incrementing 2→17
                 { rounds: 2, cards: 18 },          // Stage 3: 2 rounds with 18 cards
-                { rounds: 17, cards: 'decrement' }, // Stage 4: 17 rounds decrementing 17→1
+                { rounds: 16, cards: 'decrement' }, // Stage 4: 16 rounds decrementing 17→2
                 { rounds: 2, cards: 1 },           // Stage 5: 2 rounds with 1 card
                 { rounds: 2, cards: 18 }           // Stage 6: 2 rounds with 18 cards
             ]
@@ -727,20 +851,20 @@ const ROUND_CONFIGS = {
             totalRounds: 32,
             stages: [
                 { rounds: 3, cards: 1 },           // Stage 1: 3 rounds with 1 card
-                { rounds: 9, cards: 'increment' }, // Stage 2: 9 rounds incrementing 2→10
-                { rounds: 3, cards: 11 },          // Stage 3: 3 rounds with 11 cards
-                { rounds: 9, cards: 'decrement' }, // Stage 4: 9 rounds decrementing 10→2
+                { rounds: 10, cards: 'increment' }, // Stage 2: 10 rounds incrementing 2→11
+                { rounds: 3, cards: 12 },          // Stage 3: 3 rounds with 12 cards
+                { rounds: 10, cards: 'decrement' }, // Stage 4: 10 rounds decrementing 11→2
                 { rounds: 3, cards: 1 },           // Stage 5: 3 rounds with 1 card
-                { rounds: 3, cards: 11 }           // Stage 6: 3 rounds with 11 cards
+                { rounds: 3, cards: 12 }           // Stage 6: 3 rounds with 12 cards
             ]
         },
         4: {
             totalRounds: 30,
             stages: [
                 { rounds: 4, cards: 1 },           // Stage 1: 4 rounds with 1 card
-                { rounds: 7, cards: 'increment' }, // Stage 2: 7 rounds incrementing 2→8
+                { rounds: 7, cards: 'increment' }, // Stage 2: 7 rounds incrementing 2→9
                 { rounds: 4, cards: 9 },           // Stage 3: 4 rounds with 9 cards
-                { rounds: 7, cards: 'decrement' }, // Stage 4: 7 rounds decrementing 8→2
+                { rounds: 7, cards: 'decrement' }, // Stage 4: 7 rounds decrementing 9→2
                 { rounds: 4, cards: 1 },           // Stage 5: 4 rounds with 1 card
                 { rounds: 4, cards: 9 }            // Stage 6: 4 rounds with 9 cards
             ]
@@ -749,9 +873,9 @@ const ROUND_CONFIGS = {
             totalRounds: 30,
             stages: [
                 { rounds: 5, cards: 1 },           // Stage 1: 5 rounds with 1 card
-                { rounds: 5, cards: 'increment' }, // Stage 2: 5 rounds incrementing 2→6
+                { rounds: 5, cards: 'increment' }, // Stage 2: 5 rounds incrementing 2→7
                 { rounds: 5, cards: 7 },           // Stage 3: 5 rounds with 7 cards
-                { rounds: 5, cards: 'decrement' }, // Stage 4: 5 rounds decrementing 6→2
+                { rounds: 5, cards: 'decrement' }, // Stage 4: 5 rounds decrementing 7→2
                 { rounds: 5, cards: 1 },           // Stage 5: 5 rounds with 1 card
                 { rounds: 5, cards: 7 }            // Stage 6: 5 rounds with 7 cards
             ]
@@ -760,9 +884,9 @@ const ROUND_CONFIGS = {
             totalRounds: 32,
             stages: [
                 { rounds: 6, cards: 1 },           // Stage 1: 6 rounds with 1 card
-                { rounds: 4, cards: 'increment' }, // Stage 2: 4 rounds incrementing 2→5
+                { rounds: 4, cards: 'increment' }, // Stage 2: 4 rounds incrementing 2→6
                 { rounds: 6, cards: 6 },           // Stage 3: 6 rounds with 6 cards
-                { rounds: 4, cards: 'decrement' }, // Stage 4: 4 rounds decrementing 5→2
+                { rounds: 4, cards: 'decrement' }, // Stage 4: 4 rounds decrementing 6→2
                 { rounds: 6, cards: 1 },           // Stage 5: 6 rounds with 1 card
                 { rounds: 6, cards: 6 }            // Stage 6: 6 rounds with 6 cards
             ]
@@ -849,6 +973,9 @@ const STORAGE_KEYS = {
 
 // Initialize the application
 document.addEventListener('DOMContentLoaded', function() {
+    // Initialize Firebase first
+    initializeFirebaseApp();
+    
     loadCustomStages();
     loadGameState();
     initializeGame();
@@ -880,14 +1007,60 @@ function saveCurrentGame() {
             currentDeckSize: currentDeckSize,
             lastSaved: new Date().toISOString()
         };
+        
+        // Save to local storage as backup
         localStorage.setItem(STORAGE_KEYS.CURRENT_GAME, JSON.stringify(gameState));
-        console.log('Game state saved:', gameState);
+        console.log('Game state saved to local storage:', gameState);
+        
+        // Save to global session if Firebase is available
+        if (firebaseInitialized && typeof GlobalGameSession !== 'undefined' && GlobalGameSession.saveGame) {
+            GlobalGameSession.saveGame(gameState)
+                .then((success) => {
+                    if (success) {
+                        console.log('Game state saved to global session');
+                    } else {
+                        console.log('Failed to save to global session, using local storage only');
+                    }
+                })
+                .catch((error) => {
+                    console.error('Error saving to global session:', error);
+                });
+        }
     } catch (e) {
         console.error('Failed to save current game:', e);
     }
 }
 
 function loadGameState() {
+    try {
+        // Try to load from global session first if Firebase is available
+        if (firebaseInitialized && typeof GlobalGameSession !== 'undefined' && GlobalGameSession.loadGame) {
+            GlobalGameSession.loadGame()
+                .then((gameData) => {
+                    if (gameData) {
+                        console.log('Game state loaded from global session:', gameData);
+                        restoreGameFromGlobalSession(gameData);
+                    } else {
+                        console.log('No game in global session, trying local storage...');
+                        loadFromLocalStorage();
+                    }
+                })
+                .catch((error) => {
+                    console.error('Failed to load from global session, trying local storage:', error);
+                    loadFromLocalStorage();
+                });
+        } else {
+            // Fallback to local storage
+            loadFromLocalStorage();
+        }
+    } catch (e) {
+        console.error('Failed to load game state:', e);
+        // If loading fails, start fresh
+        initializeFreshGame();
+    }
+}
+
+function loadFromLocalStorage() {
     try {
         const saved = localStorage.getItem(STORAGE_KEYS.CURRENT_GAME);
         if (saved) {
@@ -916,15 +1089,13 @@ function loadGameState() {
                 currentGame.endTime = new Date(currentGame.endTime);
             }
             
-            console.log('Game state restored:', gameState);
+            console.log('Game state restored from local storage:', gameState);
             
             // Restore UI state
             restoreUIState();
-            
-            // No popup for restored games - just continue silently
         }
     } catch (e) {
-        console.error('Failed to load game state:', e);
+        console.error('Failed to load from local storage:', e);
         // If loading fails, start fresh
         initializeFreshGame();
     }
@@ -1403,7 +1574,7 @@ function getCardsPerHand() {
                 return stageRound + 1; // Start from 2, so add 1
             } else if (stageConfig.cards === 'decrement') {
                 const maxCards = getMaxCardsForPlayerCount(playerCount);
-                return maxCards - stageRound + 1;
+                return maxCards - stageRound; // Start from maxCards-1, go down to 2
             } else {
                 return stageConfig.cards; // Fixed number of cards
             }
@@ -1485,11 +1656,11 @@ function getScoringRulesText() {
         case 1:
             return `Этап 1 (${stageRound}/${totalStageRounds}): Заказ 1, Взятка 1 = +30 | Заказ 1, Взятка 0 = -30 | Заказ 0, Взятка 0 = +15 | Заказ 0, Взятка 1 = +5${biddingRules}`;
         case 2:
-            return `Этап 2 (${stageRound}/${totalStageRounds}): Заказ 1, Взятка 1 = +10 | Заказ 1, Взятка 0 = -10 | Заказ 0, Взятка 0 = +5 | Заказ 0, Взятка 1 = +1${biddingRules}`;
+            return `Этап 2 (${stageRound}/${totalStageRounds}): Заказ 1, Взятка 1 = +10 | Заказ 1, Взятка 0 = -10 | Заказ 0, Взятка 0 = +5 | Заказ 0, Взятка n = +n${biddingRules}`;
         case 3:
-            return `Этап 3 (${stageRound}/${totalStageRounds}): Заказ 1, Взятка 1 = +10 | Заказ 1, Взятка 0 = -10 | Заказ 0, Взятка 0 = +5 | Заказ 0, Взятка 1 = +1${biddingRules}`;
+            return `Этап 3 (${stageRound}/${totalStageRounds}): Заказ 1, Взятка 1 = +10 | Заказ 1, Взятка 0 = -10 | Заказ 0, Взятка 0 = +5 | Заказ 0, Взятка n = +n${biddingRules}`;
         case 4:
-            return `Этап 4 (${stageRound}/${totalStageRounds}): Заказ 1, Взятка 1 = +10 | Заказ 1, Взятка 0 = -10 | Заказ 0, Взятка 0 = +5 | Заказ 0, Взятка 1 = +1${biddingRules}`;
+            return `Этап 4 (${stageRound}/${totalStageRounds}): Заказ 1, Взятка 1 = +10 | Заказ 1, Взятка 0 = -10 | Заказ 0, Взятка 0 = +5 | Заказ 0, Взятка n = +n${biddingRules}`;
         case 5:
             return `Этап 5 (${stageRound}/${totalStageRounds}): Заказ 1, Взятка 1 = +30 | Заказ 1, Взятка 0 = -30 | Заказ 0, Взятка 0 = +15 | Заказ 0, Взятка 1 = +5${biddingRules}`;
         case 6:
@@ -1535,8 +1706,8 @@ function calculateNormalScore(bid, tricks) {
     // Stages 2, 3, 4: Normal scoring rules
     else {
         if (bid === 0) {
-            // Pass - 5 points if no tricks taken
-            result = tricks === 0 ? 5 : 1;
+            // Pass - 5 points if no tricks taken, n points if n tricks taken
+            result = tricks === 0 ? 5 : tricks;
         } else if (tricks === bid) {
             // Exact bid - 10 points per trick
             result = tricks * 10;
@@ -1678,6 +1849,17 @@ function toggleSpecialGame() {
 
 function newGame() {
     if (confirm('Начать новую игру? Текущие очки будут сохранены в истории.')) {
+        // Clear global session if Firebase is available
+        if (firebaseInitialized && typeof GlobalGameSession !== 'undefined' && GlobalGameSession.clearSession) {
+            GlobalGameSession.clearSession()
+                .then(() => {
+                    console.log('Global session cleared for new game');
+                })
+                .catch((error) => {
+                    console.error('Failed to clear global session:', error);
+                });
+        }
+        
         // Save current game if it has scores
         if (Object.values(currentGame.scores).some(score => score !== 0)) {
             const gameResult = {
@@ -1746,6 +1928,17 @@ function newGame() {
 
 function resetGame() {
     if (confirm('Сбросить все очки и начать заново?')) {
+        // Clear global session if Firebase is available
+        if (firebaseInitialized && typeof GlobalGameSession !== 'undefined' && GlobalGameSession.clearSession) {
+            GlobalGameSession.clearSession()
+                .then(() => {
+                    console.log('Global session cleared for reset game');
+                })
+                .catch((error) => {
+                    console.error('Failed to clear global session:', error);
+                });
+        }
+        
         players.forEach(player => {
             currentGame.scores[player] = 0;
         });
@@ -1769,11 +1962,11 @@ function resetGame() {
         
         // Re-enable player management controls
         const addPlayerBtn = document.querySelector('.add-player-btn');
-        const removePlayerBtns = document.querySelectorAll('.remove-player');
+        const removePlayerBtn = document.querySelectorAll('.remove-player');
         const deckSizeSelect = document.getElementById('deckSize');
         
         if (addPlayerBtn) addPlayerBtn.disabled = false;
-        removePlayerBtns.forEach(btn => btn.disabled = false);
+        removePlayerBtn.forEach(btn => btn.disabled = false);
         if (deckSizeSelect) deckSizeSelect.disabled = false;
         
         // Show setup screen for reset game
@@ -1814,7 +2007,27 @@ function updateGameHistory() {
 
 function saveGameHistory() {
     try {
+        // Save to local storage as backup
         localStorage.setItem('raspisnoyPokerGameHistory', JSON.stringify(gameHistory));
+        
+        // If Firebase is available, save to cloud
+        if (firebaseInitialized && typeof GameHistoryDB !== 'undefined' && GameHistoryDB.saveGame) {
+            // Save the most recent game if it exists
+            if (gameHistory.length > 0) {
+                const latestGame = gameHistory[0];
+                GameHistoryDB.saveGame(latestGame)
+                    .then((gameId) => {
+                        if (gameId) {
+                            console.log('Game saved to Firebase with ID:', gameId);
+                            // Update the game with Firebase ID for future updates
+                            latestGame.firebaseId = gameId;
+                        }
+                    })
+                    .catch((error) => {
+                        console.error('Failed to save game to Firebase:', error);
+                    });
+            }
+        }
     } catch (e) {
         console.error('Failed to save game history:', e);
     }
@@ -1822,18 +2035,48 @@ function saveGameHistory() {
 
 function loadGameHistory() {
     try {
+        // Try to load from Firebase first if available
+        if (firebaseInitialized && typeof GameHistoryDB !== 'undefined' && GameHistoryDB.loadGames) {
+            GameHistoryDB.loadGames()
+                .then((games) => {
+                    if (games && games.length > 0) {
+                        gameHistory = games;
+                        updateGameHistory();
+                        console.log(`Loaded ${games.length} games from Firebase`);
+                    } else {
+                        // Fallback to local storage
+                        loadFromLocalStorage();
+                    }
+                })
+                .catch((error) => {
+                    console.error('Failed to load from Firebase, falling back to local storage:', error);
+                    loadFromLocalStorage();
+                });
+        } else {
+            // Fallback to local storage
+            loadFromLocalStorage();
+        }
+    } catch (e) {
+        console.error('Failed to load game history:', e);
+        gameHistory = [];
+    }
+}
+
+function loadFromLocalStorage() {
+    try {
         const saved = localStorage.getItem('raspisnoyPokerGameHistory');
         if (saved) {
             gameHistory = JSON.parse(saved);
             // Convert date strings back to Date objects
             gameHistory.forEach(game => {
-                game.startTime = new Date(game.startTime);
-                game.endTime = new Date(game.endTime);
+                if (game.startTime) game.startTime = new Date(game.startTime);
+                if (game.endTime) game.endTime = new Date(game.endTime);
             });
             updateGameHistory();
+            console.log(`Loaded ${gameHistory.length} games from local storage`);
         }
     } catch (e) {
-        console.error('Failed to load game history:', e);
+        console.error('Failed to load from local storage:', e);
         gameHistory = [];
     }
 }
@@ -3373,18 +3616,18 @@ function calculateRoundsForStage(stageType, playerCount, deckSize) {
             return Math.max(2, Math.min(6, playerCount));
             
         case 'rising':
-            // Rising stages: increment from 2 to maxCards
-            // Number of rounds = maxCards - 1 (since we start from 2)
-            return maxCards - 1;
+            // Rising stages: increment from 2 to maxCards-1
+            // Number of rounds = maxCards - 2 (since we go from 2 to maxCards-1)
+            return maxCards - 2;
             
         case 'full':
             // Full stages: 2-6 rounds based on player count
             return Math.max(2, Math.min(6, playerCount));
             
         case 'decreasing':
-            // Decreasing stages: decrement from maxCards to 2
-            // Number of rounds = maxCards - 1 (since we end at 2)
-            return maxCards - 1;
+            // Decreasing stages: decrement from maxCards-1 to 2
+            // Number of rounds = maxCards - 2 (since we go from maxCards-1 to 2)
+            return maxCards - 2;
             
         case 'blind':
             // Blind stages: 2-6 rounds based on player count
@@ -3404,11 +3647,11 @@ function getStageDescription(stageType, playerCount, deckSize) {
         case 'golden':
             return `${rounds} rounds with 1 card`;
         case 'rising':
-            return `${rounds} rounds incrementing 2→${maxCards}`;
+            return `${rounds} rounds incrementing 2→${maxCards-1}`;
         case 'full':
             return `${rounds} rounds with ${maxCards} cards`;
         case 'decreasing':
-            return `${rounds} rounds decrementing ${maxCards}→2`;
+            return `${rounds} rounds decrementing ${maxCards-1}→2`;
         case 'blind':
             return `${rounds} rounds with ${maxCards} cards (blind)`;
         default:

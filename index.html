@@ -6,6 +6,11 @@
     <title>Расписной Покер Score Counter</title>
     <link rel="stylesheet" href="styles.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
 </head>
 <body>
     <div class="container">
@@ -47,6 +52,19 @@
                 <div class="menu-info">
                     <h3>О игре</h3>
                     <p>Расписной покер - это карточная игра, основанная на принципах бриджа. Игроки делают ставки на количество взяток, которые они возьмут в каждом раунде.</p>
+                    
+                    <div class="firebase-status" id="firebaseStatus">
+                        <div class="status-indicator offline" id="statusIndicator">
+                            <span class="status-dot"></span>
+                            <span class="status-text">Офлайн</span>
+                        </div>
+                        <button class="sync-btn" id="syncBtn" onclick="syncWithFirebase()" style="display: none;">
+                            🔄 Синхронизировать игру
+                        </button>
+                        <div class="session-info" id="sessionInfo" style="display: none;">
+                            <small>Игра синхронизируется в реальном времени</small>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -425,6 +443,7 @@
         </div>
     </div>
 
+    <script src="firebase-config.js"></script>
     <script src="script.js"></script>
 </body>
 </html> 
