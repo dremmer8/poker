@@ -708,10 +708,10 @@ async function loadSavedGame() {
                 
                 // Show appropriate screen based on game state
                 if (currentGame.gameStarted) {
-                    console.log('Game was in progress, showing counting screen');
+                    console.log('✅ Game was in progress, showing counting screen');
                     showCountingScreen();
                 } else {
-                    console.log('Game was in setup, showing setup screen');
+                    console.log('✅ Game was in setup, showing setup screen');
                     showGameSetup();
                 }
             } else {
@@ -757,8 +757,10 @@ function loadFromLocalStorageFallback() {
             
             // Show appropriate screen based on game state
             if (currentGame.gameStarted) {
+                console.log('✅ Loaded saved game in progress, showing counting screen');
                 showCountingScreen();
             } else {
+                console.log('✅ Loaded saved game setup, showing setup screen');
                 showGameSetup();
             }
         } catch (e) {
@@ -767,6 +769,7 @@ function loadFromLocalStorageFallback() {
             showGameSetup();
         }
     } else {
+        console.log('❌ No saved game found in local storage');
         alert('Сохраненной игры не найдено. Начните новую игру.');
         showGameSetup();
     }
