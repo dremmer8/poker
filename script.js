@@ -32,17 +32,29 @@ let transitionCountdown = 15;
 let currentScreen = 'menu';
 
 // Firebase initialization and global session management
-function initializeFirebaseApp() {
+async function initializeFirebaseApp() {
+    console.log('Initializing Firebase app...');
+    
     if (typeof initializeFirebase === 'function') {
-        firebaseInitialized = initializeFirebase();
-        updateFirebaseStatus();
-        
-        if (firebaseInitialized) {
-            // Start listening for global game updates
-            startGlobalGameListener();
+        try {
+            firebaseInitialized = initializeFirebase();
+            console.log('Firebase initialization result:', firebaseInitialized);
+            
+            updateFirebaseStatus();
+            
+            if (firebaseInitialized) {
+                // Start listening for global game updates
+                startGlobalGameListener();
+                console.log('Firebase app initialized successfully');
+                return true;
+            } else {
+                console.log('Firebase initialization failed');
+                return false;
+            }
+        } catch (error) {
+            console.error('Error during Firebase initialization:', error);
+            return false;
         }
-        
-        return firebaseInitialized;
     } else {
         console.error('Firebase functions not loaded');
         return false;
@@ -131,14 +143,32 @@ function startGlobalGameListener() {
 // Restore game state from global session data
 function restoreGameFromGlobalSession(gameData) {
     try {
-        // Restore basic game state
-        currentGame = gameData;
-        players = gameData.players || [];
-        currentDeckSize = gameData.currentDeckSize || 36;
+        console.log('Restoring game from global session data:', gameData);
+        
+        // The Firebase data structure has currentGame nested inside
+        if (gameData.currentGame) {
+            // Extract the nested game state
+            currentGame = gameData.currentGame;
+            players = gameData.players || [];
+            currentDeckSize = gameData.currentDeckSize || 36;
+        } else {
+            // Direct game data structure
+            currentGame = gameData;
+            players = gameData.players || [];
+            currentDeckSize = gameData.currentDeckSize || 36;
+        }
         
         // Ensure required fields exist
         if (!currentGame.roundResults) currentGame.roundResults = [];
         if (!currentGame.currentRoundData) currentGame.currentRoundData = null;
+        if (!currentGame.scores) currentGame.scores = {};
+        
+        // Initialize scores for all players if missing
+        players.forEach(player => {
+            if (!currentGame.scores[player]) {
+                currentGame.scores[player] = 0;
+            }
+        });
         
         // Restore UI state
         restoreUIState();
@@ -148,9 +178,14 @@ function restoreGameFromGlobalSession(gameData) {
         updateRoundsHistory();
         updateScoresDisplay();
         
-        console.log('Game state restored from global session');
+        console.log('Game state restored from global session successfully');
+        console.log('Current game state:', currentGame);
+        console.log('Players:', players);
+        console.log('Current deck size:', currentDeckSize);
     } catch (error) {
         console.error('Error restoring game from global session:', error);
+        // Fallback to local storage if Firebase restore fails
+        loadFromLocalStorageFallback();
     }
 }
 
@@ -649,7 +684,46 @@ function startNewGameFromCelebration() {
     saveCurrentGame();
 }
 
-function loadSavedGame() {
+async function loadSavedGame() {
+    console.log('=== LOAD SAVED GAME ===');
+    console.log('Firebase initialized:', firebaseInitialized);
+    console.log('GlobalGameSession available:', typeof GlobalGameSession !== 'undefined');
+    
+    // Try to load from Firebase global session first
+    if (firebaseInitialized && typeof GlobalGameSession !== 'undefined' && GlobalGameSession.loadGame) {
+        console.log('✅ Loading game from Firebase global session...');
+        
+        try {
+            const gameData = await GlobalGameSession.loadGame();
+            if (gameData) {
+                console.log('✅ Game loaded from Firebase global session:', gameData);
+                restoreGameFromGlobalSession(gameData);
+                
+                // Show appropriate screen based on game state
+                if (currentGame.gameStarted) {
+                    console.log('Game was in progress, showing counting screen');
+                    showCountingScreen();
+                } else {
+                    console.log('Game was in setup, showing setup screen');
+                    showGameSetup();
+                }
+            } else {
+                console.log('❌ No game in Firebase global session, trying local storage...');
+                loadFromLocalStorageFallback();
+            }
+        } catch (error) {
+            console.error('❌ Failed to load from Firebase global session, trying local storage:', error);
+            loadFromLocalStorageFallback();
+        }
+    } else {
+        console.log('❌ Firebase not available, loading from local storage...');
+        console.log('Firebase initialized:', firebaseInitialized);
+        console.log('GlobalGameSession type:', typeof GlobalGameSession);
+        loadFromLocalStorageFallback();
+    }
+}
+
+function loadFromLocalStorageFallback() {
     const savedGame = localStorage.getItem(STORAGE_KEYS.CURRENT_GAME);
     if (savedGame) {
         try {
@@ -671,18 +745,17 @@ function loadSavedGame() {
                 currentGame.endTime = new Date(currentGame.endTime);
             }
             
-            // Restore UI state
+            // Restore UIState
             restoreUIState();
             
             // Show appropriate screen based on game state
             if (currentGame.gameStarted) {
                 showCountingScreen();
-                // No popup for loaded games - just continue silently
             } else {
                 showGameSetup();
             }
         } catch (e) {
-            console.error('Failed to load saved game:', e);
+            console.error('Failed to load saved game from local storage:', e);
             alert('Ошибка загрузки сохраненной игры. Начните новую игру.');
             showGameSetup();
         }
@@ -972,12 +1045,24 @@ const STORAGE_KEYS = {
 };
 
 // Initialize the application
-document.addEventListener('DOMContentLoaded', function() {
-    // Initialize Firebase first
-    initializeFirebaseApp();
+document.addEventListener('DOMContentLoaded', async function() {
+    console.log('=== APP INITIALIZATION STARTED ===');
+    
+    // Initialize Firebase first and wait for it
+    const firebaseReady = await initializeFirebaseApp();
+    console.log('Firebase initialization result:', firebaseReady);
     
     loadCustomStages();
-    loadGameState();
+    
+    // Only try to load from Firebase if it's ready, otherwise use local storage
+    if (firebaseReady) {
+        console.log('Firebase ready, attempting to load from global session...');
+        await loadGameState();
+    } else {
+        console.log('Firebase not ready, loading from local storage...');
+        loadFromLocalStorage();
+    }
+    
     initializeGame();
     loadGameHistory();
     
@@ -989,7 +1074,7 @@ document.addEventListener('DOMContentLoaded', function() {
     if (savedGame) {
         try {
             const gameState = JSON.parse(savedGame);
-            if (gameState.currentGame.gameStarted) {
+            if (gameState.currentGame && gameState.currentGame.gameStarted) {
                 // If game is in progress, show counting screen
                 showCountingScreen();
             }
@@ -997,6 +1082,8 @@ document.addEventListener('DOMContentLoaded', function() {
             console.error('Failed to parse saved game:', e);
         }
     }
+    
+    console.log('=== APP INITIALIZATION COMPLETED ===');
 });
 
 function saveCurrentGame() {
@@ -1031,32 +1118,42 @@ function saveCurrentGame() {
     }
 }
 
-function loadGameState() {
+async function loadGameState() {
     try {
+        console.log('=== LOAD GAME STATE ===');
+        console.log('Firebase initialized:', firebaseInitialized);
+        console.log('GlobalGameSession available:', typeof GlobalGameSession !== 'undefined');
+        
         // Try to load from global session first if Firebase is available
         if (firebaseInitialized && typeof GlobalGameSession !== 'undefined' && GlobalGameSession.loadGame) {
-            GlobalGameSession.loadGame()
-                .then((gameData) => {
-                    if (gameData) {
-                        console.log('Game state loaded from global session:', gameData);
-                        restoreGameFromGlobalSession(gameData);
-                    } else {
-                        console.log('No game in global session, trying local storage...');
-                        loadFromLocalStorage();
-                    }
-                })
-                .catch((error) => {
-                    console.error('Failed to load from global session, trying local storage:', error);
+            console.log('✅ Loading from Firebase global session...');
+            
+            try {
+                const gameData = await GlobalGameSession.loadGame();
+                if (gameData) {
+                    console.log('✅ Game state loaded from global session:', gameData);
+                    restoreGameFromGlobalSession(gameData);
+                    return true;
+                } else {
+                    console.log('❌ No game in global session, trying local storage...');
                     loadFromLocalStorage();
-                });
+                    return false;
+                }
+            } catch (error) {
+                console.error('❌ Failed to load from global session, trying local storage:', error);
+                loadFromLocalStorage();
+                return false;
+            }
         } else {
-            // Fallback to local storage
+            console.log('❌ Firebase not available, loading from local storage...');
             loadFromLocalStorage();
+            return false;
         }
     } catch (e) {
         console.error('Failed to load game state:', e);
         // If loading fails, start fresh
         initializeFreshGame();
+        return false;
     }
 }
 
