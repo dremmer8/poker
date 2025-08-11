@@ -13,6 +13,7 @@ const firebaseConfig = {
 
 // Initialize Firebase
 let db;
+let storage;
 let currentGameListener = null;
 
 // Initialize Firebase when the page loads
@@ -21,6 +22,7 @@ function initializeFirebase() {
         try {
             firebase.initializeApp(firebaseConfig);
             db = firebase.firestore();
+            storage = firebase.storage();
             console.log('Firebase initialized successfully');
             return true;
         } catch (error) {
@@ -32,6 +34,139 @@ function initializeFirebase() {
         return false;
     }
 }
+
+// Player Database Management
+const PlayerDatabase = {
+    // Add or update a player
+    async savePlayer(playerName, playerData) {
+        if (!db) {
+            console.error('Firebase not initialized');
+            return false;
+        }
+        
+        try {
+            const playerRef = db.collection('players').doc(playerName);
+            await playerRef.set({
+                ...playerData,
+                lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            console.log(`Player ${playerName} saved successfully`);
+            return true;
+        } catch (error) {
+            console.error('Error saving player:', error);
+            return false;
+        }
+    },
+    
+    // Get a player by name
+    async getPlayer(playerName) {
+        if (!db) {
+            console.error('Firebase not initialized');
+            return null;
+        }
+        
+        try {
+            const playerDoc = await db.collection('players').doc(playerName).get();
+            if (playerDoc.exists) {
+                return playerDoc.data();
+            }
+            return null;
+        } catch (error) {
+            console.error('Error getting player:', error);
+            return null;
+        }
+    },
+    
+    // Get all players
+    async getAllPlayers() {
+        if (!db) {
+            console.error('Firebase not initialized');
+            return [];
+        }
+        
+        try {
+            const snapshot = await db.collection('players').get();
+            const players = [];
+            snapshot.forEach(doc => {
+                players.push({
+                    name: doc.id,
+                    ...doc.data()
+                });
+            });
+            return players;
+        } catch (error) {
+            console.error('Error getting all players:', error);
+            return [];
+        }
+    },
+    
+    // Delete a player
+    async deletePlayer(playerName) {
+        if (!db) {
+            console.error('Firebase not initialized');
+            return false;
+        }
+        
+        try {
+            // Delete player image from storage if exists
+            const player = await this.getPlayer(playerName);
+            if (player && player.imageUrl) {
+                await this.deletePlayerImage(player.imageUrl);
+            }
+            
+            // Delete player document
+            await db.collection('players').doc(playerName).delete();
+            console.log(`Player ${playerName} deleted successfully`);
+            return true;
+        } catch (error) {
+            console.error('Error deleting player:', error);
+            return false;
+        }
+    }
+};
+
+// Image Storage Management
+const ImageStorage = {
+    // Upload player image
+    async uploadPlayerImage(playerName, file) {
+        if (!storage) {
+            console.error('Firebase Storage not initialized');
+            return null;
+        }
+        
+        try {
+            const fileExtension = file.name.split('.').pop();
+            const fileName = `players/${playerName}_${Date.now()}.${fileExtension}`;
+            const storageRef = storage.ref().child(fileName);
+            
+            const snapshot = await storageRef.put(file);
+            const downloadURL = await snapshot.ref.getDownloadURL();
+            
+            console.log(`Image uploaded for ${playerName}:`, downloadURL);
+            return downloadURL;
+        } catch (error) {
+            console.error('Error uploading image:', error);
+            return null;
+        }
+    },
+    
+    // Delete player image
+    async deletePlayerImage(imageUrl) {
+        if (!storage || !imageUrl) {
+            return false;
+        }
+        
+        try {
+            const imageRef = storage.refFromURL(imageUrl);
+            await imageRef.delete();
+            console.log('Player image deleted successfully');
+            return true;
+        } catch (error) {
+            console.error('Error deleting player image:', error);
+            return false;
+        }
+    }
+};
 
 // Global game session management
 const GlobalGameSession = {
@@ -184,3 +319,5 @@ function generateDeviceId() {
 // Export for use in main script
 window.GlobalGameSession = GlobalGameSession;
 window.initializeFirebase = initializeFirebase;
+window.PlayerDatabase = PlayerDatabase;
+window.ImageStorage = ImageStorage;

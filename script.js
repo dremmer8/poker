@@ -67,18 +67,28 @@ function updateFirebaseStatus() {
     const syncBtn = document.getElementById('syncBtn');
     const sessionInfo = document.getElementById('sessionInfo');
     
-    if (!statusIndicator) return;
+    // Check if elements exist before trying to update them
+    if (!statusIndicator) {
+        console.log('Status indicator not found, skipping status update');
+        return;
+    }
     
-    if (firebaseInitialized) {
-        statusIndicator.className = 'status-indicator online';
-        statusText.textContent = 'Онлайн';
-        if (syncBtn) syncBtn.style.display = 'block';
-        if (sessionInfo) sessionInfo.style.display = 'block';
-    } else {
-        statusIndicator.className = 'status-indicator offline';
-        statusText.textContent = 'Офлайн';
-        if (syncBtn) syncBtn.style.display = 'none';
-        if (sessionInfo) sessionInfo.style.display = 'none';
+    try {
+        if (firebaseInitialized) {
+            statusIndicator.className = 'status-indicator online';
+            if (statusText) statusText.textContent = 'Онлайн';
+            if (syncBtn) syncBtn.style.display = 'block';
+            if (sessionInfo) sessionInfo.style.display = 'block';
+            console.log('Firebase status updated: ONLINE');
+        } else {
+            statusIndicator.className = 'status-indicator offline';
+            if (statusText) statusText.textContent = 'Офлайн';
+            if (syncBtn) syncBtn.style.display = 'none';
+            if (sessionInfo) sessionInfo.style.display = 'none';
+            console.log('Firebase status updated: OFFLINE');
+        }
+    } catch (error) {
+        console.error('Error updating Firebase status:', error);
     }
 }
 
@@ -3766,6 +3776,11 @@ function showStagesEdit() {
     updateStagesPreview();
 }
 
+function showPlayerManagement() {
+    showScreen('playerManagementScreen');
+    loadPlayersList();
+}
+
 function loadCurrentStages() {
     const playerCount = players.length;
     const deckSize = parseInt(document.getElementById('deckSize').value);
@@ -4036,4 +4051,235 @@ function getRoundConfig() {
     // Fall back to default configuration
     return ROUND_CONFIGS[deckSize]?.[playerCount] || ROUND_CONFIGS[36][4];
 }
+
+// Player Management Functions
+let selectedPlayerImage = null;
+
+// Load and display the list of players
+async function loadPlayersList() {
+    try {
+        const playersList = document.getElementById('playersList');
+        if (!playersList) return;
+        
+        playersList.innerHTML = '<div class="loading">Загрузка игроков...</div>';
+        
+        const players = await PlayerDatabase.getAllPlayers();
+        
+        if (players.length === 0) {
+            playersList.innerHTML = '<div class="no-players">Пока нет добавленных игроков</div>';
+            return;
+        }
+        
+        playersList.innerHTML = '';
+        
+        players.forEach(player => {
+            const playerItem = createPlayerItem(player);
+            playersList.appendChild(playerItem);
+        });
+        
+    } catch (error) {
+        console.error('Error loading players:', error);
+        const playersList = document.getElementById('playersList');
+        if (playersList) {
+            playersList.innerHTML = '<div class="error">Ошибка загрузки игроков</div>';
+        }
+    }
+}
+
+// Create a player item element
+function createPlayerItem(player) {
+    const playerItem = document.createElement('div');
+    playerItem.className = 'player-item';
+    
+    if (!player.imageUrl) {
+        playerItem.classList.add('no-image');
+    }
+    
+    const avatar = player.imageUrl 
+        ? `<img src="${player.imageUrl}" alt="${player.name}" class="player-avatar">`
+        : `<div class="player-avatar">👤</div>`;
+    
+    const lastUpdated = player.lastUpdated 
+        ? new Date(player.lastUpdated.toDate ? player.lastUpdated.toDate() : player.lastUpdated).toLocaleDateString('ru-RU')
+        : 'Недавно';
+    
+    playerItem.innerHTML = `
+        ${avatar}
+        <div class="player-info">
+            <div class="player-name">${player.name}</div>
+            <div class="player-details">Добавлен: ${lastUpdated}</div>
+        </div>
+        <div class="player-actions">
+            <button class="player-action-btn edit-player-btn" onclick="editPlayer('${player.name}')">
+                ✏️ Редактировать
+            </button>
+            <button class="player-action-btn delete-player-btn" onclick="deletePlayer('${player.name}')">
+                🗑️ Удалить
+            </button>
+        </div>
+    `;
+    
+    return playerItem;
+}
+
+// Add a new player
+async function addNewPlayer() {
+    const playerNameInput = document.getElementById('newPlayerName');
+    const playerName = playerNameInput.value.trim();
+    
+    if (!playerName) {
+        alert('Пожалуйста, введите имя игрока');
+        return;
+    }
+    
+    if (playerName.length > 20) {
+        alert('Имя игрока не может быть длиннее 20 символов');
+        return;
+    }
+    
+    if (!selectedPlayerImage) {
+        alert('Пожалуйста, выберите фото для игрока');
+        return;
+    }
+    
+    try {
+        // Disable submit button
+        const submitBtn = document.querySelector('.add-player-submit-btn');
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Добавление...';
+        
+        // Upload image first
+        const imageUrl = await ImageStorage.uploadPlayerImage(playerName, selectedPlayerImage);
+        
+        if (!imageUrl) {
+            throw new Error('Failed to upload image');
+        }
+        
+        // Save player data
+        const playerData = {
+            name: playerName,
+            imageUrl: imageUrl,
+            createdAt: new Date()
+        };
+        
+        const success = await PlayerDatabase.savePlayer(playerName, playerData);
+        
+        if (success) {
+            // Clear form
+            playerNameInput.value = '';
+            removeImagePreview();
+            selectedPlayerImage = null;
+            
+            // Reload players list
+            await loadPlayersList();
+            
+            alert(`Игрок ${playerName} успешно добавлен!`);
+        } else {
+            throw new Error('Failed to save player');
+        }
+        
+    } catch (error) {
+        console.error('Error adding player:', error);
+        alert('Ошибка при добавлении игрока: ' + error.message);
+    } finally {
+        // Re-enable submit button
+        const submitBtn = document.querySelector('.add-player-submit-btn');
+        submitBtn.disabled = false;
+        submitBtn.textContent = '➕ Добавить игрока';
+    }
+}
+
+// Edit player (placeholder for future functionality)
+function editPlayer(playerName) {
+    alert(`Редактирование игрока ${playerName} будет доступно в следующей версии`);
+}
+
+// Delete player
+async function deletePlayer(playerName) {
+    if (!confirm(`Вы уверены, что хотите удалить игрока ${playerName}?`)) {
+        return;
+    }
+    
+    try {
+        const success = await PlayerDatabase.deletePlayer(playerName);
+        
+        if (success) {
+            await loadPlayersList();
+            alert(`Игрок ${playerName} успешно удален`);
+        } else {
+            throw new Error('Failed to delete player');
+        }
+        
+    } catch (error) {
+        console.error('Error deleting player:', error);
+        alert('Ошибка при удалении игрока: ' + error.message);
+    }
+}
+
+// Handle image file selection
+document.addEventListener('DOMContentLoaded', function() {
+    const imageInput = document.getElementById('playerImageInput');
+    if (imageInput) {
+        imageInput.addEventListener('change', handleImageSelection);
+    }
+});
+
+function handleImageSelection(event) {
+    const file = event.target.files[0];
+    
+    if (!file) {
+        removeImagePreview();
+        return;
+    }
+    
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+        alert('Пожалуйста, выберите файл изображения');
+        event.target.value = '';
+        return;
+    }
+    
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+        alert('Размер файла не может превышать 5MB');
+        event.target.value = '';
+        return;
+    }
+    
+    // Store selected image
+    selectedPlayerImage = file;
+    
+    // Show preview
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const preview = document.getElementById('imagePreview');
+        const previewImg = document.getElementById('previewImage');
+        
+        if (preview && previewImg) {
+            previewImg.src = e.target.result;
+            preview.style.display = 'block';
+        }
+    };
+    
+    reader.readAsDataURL(file);
+}
+
+// Remove image preview
+function removeImagePreview() {
+    const preview = document.getElementById('imagePreview');
+    const imageInput = document.getElementById('playerImageInput');
+    
+    if (preview) {
+        preview.style.display = 'none';
+    }
+    
+    if (imageInput) {
+        imageInput.value = '';
+    }
+    
+    selectedPlayerImage = null;
+}
+
+// Load custom stages on page load
+loadCustomStages();
 

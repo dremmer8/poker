@@ -11,6 +11,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage-compat.js"></script>
 </head>
 <body>
     <div class="container">
@@ -45,6 +46,11 @@
                         <button class="menu-btn reset" onclick="resetCurrentGame()">
                             <span class="btn-icon">🔄</span>
                             <span class="btn-text">Сбросить игру</span>
+                        </button>
+                        
+                        <button class="menu-btn players" onclick="showPlayerManagement()">
+                            <span class="btn-icon">👥</span>
+                            <span class="btn-text">Управление игроками</span>
                         </button>
                     </div>
                 </div>
@@ -437,6 +443,51 @@
                                 <!-- Stage info will be populated by JavaScript -->
                             </div>
                         </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Screen 8: Player Management -->
+        <div id="playerManagementScreen" class="screen">
+            <header>
+                <h1>Управление игроками</h1>
+                <p>Добавляйте, редактируйте и управляйте профилями игроков</p>
+                <button class="back-btn" onclick="showMenu()">← Назад в меню</button>
+            </header>
+
+            <div class="player-management">
+                <div class="add-player-section">
+                    <h2>Добавить нового игрока</h2>
+                    <div class="add-player-form">
+                        <div class="form-group">
+                            <label for="newPlayerName">Имя игрока:</label>
+                            <input type="text" id="newPlayerName" placeholder="Введите имя игрока" maxlength="20">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="playerImageInput">Фото игрока:</label>
+                            <div class="image-upload-container">
+                                <input type="file" id="playerImageInput" accept="image/*" style="display: none;">
+                                <button type="button" class="image-upload-btn" onclick="document.getElementById('playerImageInput').click()">
+                                    <span class="upload-icon">📷</span>
+                                    <span class="upload-text">Выбрать фото</span>
+                                </button>
+                                <div class="image-preview" id="imagePreview" style="display: none;">
+                                    <img id="previewImage" src="" alt="Preview">
+                                    <button type="button" class="remove-image-btn" onclick="removeImagePreview()">×</button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <button class="add-player-submit-btn" onclick="addNewPlayer()">➕ Добавить игрока</button>
+                    </div>
+                </div>
+
+                <div class="players-list-section">
+                    <h2>Список игроков</h2>
+                    <div class="players-list" id="playersList">
+                        <!-- Players will be populated by JavaScript -->
                     </div>
                 </div>
             </div>

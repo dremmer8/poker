@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Poker Game Visualizer</title>
+    <link rel="stylesheet" href="visualizer.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage-compat.js"></script>
+</head>
+<body>
+    <div class="visualizer-container">
+        <!-- Header Section -->
+        <header class="visualizer-header">
+            <div class="header-left">
+                <h1 class="game-title">Расписной Покер</h1>
+                <div class="game-status">
+                    <span class="status-indicator" id="statusIndicator">
+                        <span class="status-dot"></span>
+                        <span class="status-text">Подключение...</span>
+                    </span>
+                </div>
+            </div>
+            
+            <div class="header-center">
+                <div class="round-info">
+                    <div class="round-number">
+                        <span class="label">Раунд</span>
+                        <span class="value" id="currentRound">-</span>
+                    </div>
+                    <div class="cards-info">
+                        <span class="label">Карт в руке</span>
+                        <span class="value" id="cardsPerHand">-</span>
+                    </div>
+                    <div class="stage-info">
+                        <span class="label">Этап</span>
+                        <span class="value" id="currentStage">-</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="header-right">
+                <div class="game-time">
+                    <span class="time-label">Время игры</span>
+                    <span class="time-value" id="gameTime">00:00</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Game Display -->
+        <main class="game-display">
+            <!-- Players Grid -->
+            <section class="players-section">
+                <div class="players-grid" id="playersGrid">
+                    <!-- Players will be dynamically populated here -->
+                </div>
+            </section>
+
+            <!-- Game Statistics -->
+            <section class="stats-section">
+                <div class="stats-container">
+                    <div class="stat-card">
+                        <h3>Общие ставки</h3>
+                        <div class="stat-value" id="totalBids">0</div>
+                        <div class="stat-max">/ <span id="maxBids">0</span></div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <h3>Общие взятки</h3>
+                        <div class="stat-value" id="totalTricks">0</div>
+                        <div class="stat-max">/ <span id="maxTricks">0</span></div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <h3>Раздающий</h3>
+                        <div class="stat-value dealer" id="currentDealer">-</div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Bottom Section -->
+        <footer class="visualizer-footer">
+            <div class="footer-content">
+                <div class="scores-display">
+                    <h3>Изменения последнего раунда</h3>
+                    <div class="scores-grid" id="scoresGrid">
+                        <!-- Delta changes will be dynamically populated here -->
+                    </div>
+                </div>
+            </div>
+        </footer>
+
+        <!-- Connection Status Overlay -->
+        <div class="connection-overlay" id="connectionOverlay">
+            <div class="overlay-content">
+                <div class="overlay-icon">📡</div>
+                <h3>Нет подключения</h3>
+                <p>Попытка подключения к игре...</p>
+                <div class="connection-spinner"></div>
+            </div>
+        </div>
+        </div>
+
+        <!-- Announcements (Full-screen overlays) -->
+        <div class="announcement-overlay" id="biddingCompleteOverlay">
+            <div class="announcement-content bidding-complete">
+                <div class="announcement-icon">🎯</div>
+                <h2>Ставки завершены!</h2>
+                <div class="bidding-summary" id="biddingSummary"></div>
+                <div class="announcement-subtitle">Взятки начинаются...</div>
+            </div>
+        </div>
+
+        <div class="announcement-overlay" id="nextRoundOverlay">
+            <div class="announcement-content next-round">
+                <div class="announcement-icon">🔄</div>
+                <h2>Следующий раунд!</h2>
+                <div class="round-summary" id="roundSummary"></div>
+                <div class="score-changes" id="scoreChanges"></div>
+                <div class="announcement-subtitle" id="nextRoundSubtitle"></div>
+            </div>
+        </div>
+
+        <script src="firebase-config.js"></script>
+        <script src="visualizer.js"></script>
+</body>
+</html>
