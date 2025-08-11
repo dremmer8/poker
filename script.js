@@ -63,7 +63,6 @@ async function initializeFirebaseApp() {
 
 function updateFirebaseStatus() {
     const statusIndicator = document.getElementById('statusIndicator');
-    const statusText = document.getElementById('statusText');
     const syncBtn = document.getElementById('syncBtn');
     const sessionInfo = document.getElementById('sessionInfo');
     
@@ -76,13 +75,11 @@ function updateFirebaseStatus() {
     try {
         if (firebaseInitialized) {
             statusIndicator.className = 'status-indicator online';
-            if (statusText) statusText.textContent = 'Онлайн';
             if (syncBtn) syncBtn.style.display = 'block';
             if (sessionInfo) sessionInfo.style.display = 'block';
             console.log('Firebase status updated: ONLINE');
         } else {
             statusIndicator.className = 'status-indicator offline';
-            if (statusText) statusText.textContent = 'Офлайн';
             if (syncBtn) syncBtn.style.display = 'none';
             if (sessionInfo) sessionInfo.style.display = 'none';
             console.log('Firebase status updated: OFFLINE');
@@ -4281,5 +4278,9 @@ function removeImagePreview() {
 }
 
 // Load custom stages on page load
-loadCustomStages();
+document.addEventListener('DOMContentLoaded', function() {
+    if (typeof loadCustomStages === 'function') {
+        loadCustomStages();
+    }
+});
 
