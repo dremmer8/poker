@@ -2296,7 +2296,7 @@ function createHistoryItem(game, index) {
                 Игра ${index + 1} ${game.prematureEnd ? '(Досрочно завершена)' : ''}
             </div>
             <div class="game-date">
-                ${game.startTime.toLocaleDateString()} ${game.startTime.toLocaleTimeString()}
+                ${game.startTime ? new Date(game.startTime).toLocaleDateString() : 'Неизвестно'} ${game.startTime ? new Date(game.startTime).toLocaleTimeString() : ''}
             </div>
         </div>
         
@@ -3603,7 +3603,7 @@ function populateGameDetails(game) {
                 Детали игры ${game.prematureEnd ? '(Досрочно завершена)' : ''}
             </div>
             <div class="details-subtitle">
-                ${game.startTime.toLocaleDateString()} ${game.startTime.toLocaleTimeString()} - ${game.endTime ? game.endTime.toLocaleDateString() + ' ' + game.endTime.toLocaleTimeString() : 'В процессе'}
+                ${game.startTime ? new Date(game.startTime).toLocaleDateString() + ' ' + new Date(game.startTime).toLocaleTimeString() : 'Неизвестное время начала'} - ${game.endTime ? new Date(game.endTime).toLocaleDateString() + ' ' + new Date(game.endTime).toLocaleTimeString() : 'В процессе'}
             </div>
         </div>
         
