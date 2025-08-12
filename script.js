@@ -2061,76 +2061,131 @@ function endGamePremature() {
         return;
     }
 
-    const confirmMessage = `Вы уверены, что хотите завершить игру досрочно?\n\nПобедитель будет определен по текущим очкам.\nЭто действие нельзя отменить.`;
+    // Show custom confirmation modal instead of native confirm()
+    showEndGameConfirmation();
+}
+
+function showEndGameConfirmation() {
+    const modal = document.createElement('div');
+    modal.id = 'endGameModal';
+    modal.className = 'custom-modal';
+    modal.innerHTML = `
+        <div class="modal-content">
+            <h3>🏁 Завершить игру досрочно?</h3>
+            <p>Победитель будет определен по текущим очкам.<br>Это действие нельзя отменить.</p>
+            <div class="modal-buttons">
+                <button class="modal-btn confirm-btn" onclick="confirmEndGame()">✅ Да, завершить</button>
+                <button class="modal-btn cancel-btn" onclick="closeEndGameModal()">❌ Отмена</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
     
-    if (confirm(confirmMessage)) {
-        console.log('=== GAME ENDED PREMATURELY ===');
-        console.log('Current scores:', currentGame.scores);
-        
-        // End the game
-        currentGame.endTime = new Date();
-        
-        // Find the winner based on current scores
-        const finalScores = Object.values(currentGame.scores);
-        const maxScore = Math.max(...finalScores);
-        const winners = Object.keys(currentGame.scores).filter(player => currentGame.scores[player] === maxScore);
-        
-        currentGame.winner = winners.length === 1 ? winners[0] : 'Tie';
-        
-        // Add a note that game was ended prematurely
-        currentGame.prematureEnd = true;
-        currentGame.prematureEndRound = currentGame.currentRound;
-        
-        // IMPORTANT: Save the finished game state to Firebase BEFORE clearing local storage
-        console.log('Saving prematurely ended game state to Firebase...');
-        saveCurrentGame(); // This will sync the finished state to Firebase
-        
-        // Wait a moment to ensure Firebase sync completes
+    // Force reflow and show modal
+    modal.offsetHeight;
+    modal.classList.add('show');
+}
+
+function confirmEndGame() {
+    closeEndGameModal();
+    // Add a small delay to ensure modal is properly closed
+    setTimeout(() => {
+        processEndGamePremature();
+    }, 100);
+}
+
+function closeEndGameModal() {
+    const modal = document.getElementById('endGameModal');
+    if (modal) {
+        modal.classList.remove('show');
         setTimeout(() => {
-            // Save to history
-            const gameResult = {
-                winner: currentGame.winner,
-                scores: { ...currentGame.scores },
-                startTime: currentGame.startTime,
-                endTime: currentGame.endTime,
-                duration: Math.round((currentGame.endTime - currentGame.startTime) / 1000 / 60),
-                rounds: currentGame.roundResults,
-                prematureEnd: true,
-                endedAtRound: currentGame.prematureEndRound,
-                players: [...players],
-                deckSize: currentDeckSize,
-                maxCards: currentGame.maxCards,
-                totalRounds: calculateTotalRounds(),
-                gameSettings: {
-                    dealerRotation: currentGame.dealerRotation,
-                    lockedPlayerCount: currentGame.lockedPlayerCount,
-                    lockedDeckSize: currentGame.lockedDeckSize
-                }
-            };
-            gameHistory.unshift(gameResult);
-            saveGameHistory();
-            updateGameHistory();
-            
-            // Clear current game from storage since it's finished
-            localStorage.removeItem(STORAGE_KEYS.CURRENT_GAME);
-            
-            // Clear Firebase session after a delay to let visualizer process the finish
-            if (firebaseInitialized && typeof GlobalGameSession !== 'undefined' && GlobalGameSession.clearSession) {
-                setTimeout(() => {
-                    GlobalGameSession.clearSession()
-                        .then(() => {
-                            console.log('Global session cleared after premature game end');
-                        })
-                        .catch((error) => {
-                            console.error('Failed to clear global session:', error);
-                        });
-                }, 5000); // 5 second delay to let visualizer show celebration
-            }
-            
-            // Show celebration screen
-            showCelebrationScreen();
-        }, 1000); // 1 second delay to ensure Firebase sync
+            modal.remove();
+        }, 300);
     }
+}
+
+function processEndGamePremature() {
+    console.log('=== GAME ENDED PREMATURELY ===');
+    console.log('Current scores:', currentGame.scores);
+    
+    // End the game
+    currentGame.endTime = new Date();
+    
+    // Find the winner based on current scores
+    const finalScores = Object.values(currentGame.scores);
+    const maxScore = Math.max(...finalScores);
+    const winners = Object.keys(currentGame.scores).filter(player => currentGame.scores[player] === maxScore);
+    
+    currentGame.winner = winners.length === 1 ? winners[0] : 'Tie';
+    
+    // Add a note that game was ended prematurely
+    currentGame.prematureEnd = true;
+    currentGame.prematureEndRound = currentGame.currentRound;
+    
+    // IMPORTANT: Save the finished game state to Firebase BEFORE clearing local storage
+    console.log('Saving prematurely ended game state to Firebase...');
+    saveCurrentGame(); // This will sync the finished state to Firebase
+    
+    // Wait a moment to ensure Firebase sync completes
+    setTimeout(() => {
+        // Save to history
+        const gameResult = {
+            winner: currentGame.winner,
+            scores: { ...currentGame.scores },
+            startTime: currentGame.startTime,
+            endTime: currentGame.endTime,
+            duration: Math.round((currentGame.endTime - currentGame.startTime) / 1000 / 60),
+            rounds: currentGame.roundResults,
+            prematureEnd: true,
+            endedAtRound: currentGame.prematureEndRound,
+            players: [...players],
+            deckSize: currentDeckSize,
+            maxCards: currentGame.maxCards,
+            totalRounds: calculateTotalRounds(),
+            gameSettings: {
+                dealerRotation: currentGame.dealerRotation,
+                lockedPlayerCount: currentGame.lockedPlayerCount,
+                lockedDeckSize: currentGame.lockedDeckSize
+            }
+        };
+        
+        gameHistory.unshift(gameResult);
+        saveGameHistory();
+        updateGameHistory();
+        
+        // Clear current game from storage since it's finished
+        localStorage.removeItem(STORAGE_KEYS.CURRENT_GAME);
+        
+        // Clear Firebase session after a delay to let visualizer process the finish
+        if (firebaseInitialized && typeof GlobalGameSession !== 'undefined' && GlobalGameSession.clearSession) {
+            setTimeout(() => {
+                GlobalGameSession.clearSession()
+                    .then(() => {
+                        console.log('Global session cleared after premature game end');
+                    })
+                    .catch((error) => {
+                        console.error('Failed to clear global session:', error);
+                    });
+            }, 5000); // 5 second delay to let visualizer show celebration
+        }
+        
+        // Show celebration screen - with mobile-friendly enhancements
+        setTimeout(() => {
+            console.log('Attempting to show celebration screen...');
+            showCelebrationScreen();
+            
+            // Force scroll to top and ensure screen is visible on mobile
+            setTimeout(() => {
+                window.scrollTo(0, 0);
+                const celebrationScreen = document.getElementById('celebrationScreen');
+                if (celebrationScreen) {
+                    celebrationScreen.style.display = 'block';
+                    celebrationScreen.classList.add('active');
+                    console.log('Celebration screen forced visible for mobile');
+                }
+            }, 200);
+        }, 500);
+    }, 1000); // 1 second delay to ensure Firebase sync
 }
 
 function resetGame() {
