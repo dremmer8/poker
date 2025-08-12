@@ -524,12 +524,17 @@ function populateCelebrationScreen() {
     const maxScore = Math.max(...finalScores);
     const winners = Object.keys(currentGame.scores).filter(player => currentGame.scores[player] === maxScore);
     
+    // Check if game was ended prematurely
+    const prematureEndMessage = currentGame.prematureEnd ? 
+        `<div class="premature-end-notice">🏁 Игра завершена досрочно на раунде ${currentGame.prematureEndRound}</div>` : '';
+    
     if (winners.length === 1) {
         winnerCard.innerHTML = `
             <h2>🏆 Победитель!</h2>
             <div class="winner-name">${winners[0]}</div>
             <div class="winner-score">${maxScore} очков</div>
             <div class="winner-message">Поздравляем с победой!</div>
+            ${prematureEndMessage}
         `;
     } else {
         winnerCard.innerHTML = `
@@ -537,6 +542,7 @@ function populateCelebrationScreen() {
             <div class="winner-name">${winners.join(' & ')}</div>
             <div class="winner-score">${maxScore} очков</div>
             <div class="winner-message">Отличная игра!</div>
+            ${prematureEndMessage}
         `;
     }
     
@@ -1771,7 +1777,7 @@ function getScoringRulesText() {
         case 5:
             return `Этап 5 (${stageRound}/${totalStageRounds}): Заказ 1, Взятка 1 = +30 | Заказ 1, Взятка 0 = -30 | Заказ 0, Взятка 0 = +15 | Заказ 0, Взятка 1 = +5${biddingRules}`;
         case 6:
-            return `Этап 6 (${stageRound}/${totalStageRounds}): Слепой этап - Заказ 1, Взятка 1 = +30 | Заказ 1, Взятка 0 = -30 | Заказ 0, Взятка 0 = +15 | Заказ 0, Взятка 1 = +5${biddingRules}`;
+            return `Этап 6 (${stageRound}/${totalStageRounds}): Слепой этап - Заказ 1, Взятка 1 = +10 | Заказ 1, Взятка 0 = -10 | Заказ 0, Взятка 0 = +5 | Заказ 0, Взятка n = +n${biddingRules}`;
         default:
             return `Правила: Точный заказ = +10 за взятку, Перебор = +1 за взятку, Недобор = -10 за недостающую взятку${biddingRules}`;
     }
@@ -1796,21 +1802,7 @@ function calculateNormalScore(bid, tricks) {
             result = 0;
         }
     }
-    // Stage 6: Blind stage (max cards) - same as first stage rules
-    else if (currentStage === 6) {
-        if (bid === 1 && tricks === 1) {
-            result = 30;
-        } else if (bid === 1 && tricks === 0) {
-            result = -30;
-        } else if (bid === 0 && tricks === 0) {
-            result = 15;
-        } else if (bid === 0 && tricks === 1) {
-            result = 5; // Fixed: Should be +5, not +15
-        } else {
-            result = 0;
-        }
-    }
-    // Stages 2, 3, 4: Normal scoring rules
+    // Stages 2, 3, 4, 6: Normal scoring rules
     else {
         if (bid === 0) {
             // Pass - 5 points if no tricks taken, n points if n tricks taken
@@ -1910,24 +1902,54 @@ function nextRound() {
         
         currentGame.winner = winners.length === 1 ? winners[0] : 'Tie';
         
-        // Save to history
-        const gameResult = {
-            winner: currentGame.winner,
-            scores: { ...currentGame.scores },
-            startTime: currentGame.startTime,
-            endTime: currentGame.endTime,
-            duration: Math.round((currentGame.endTime - currentGame.startTime) / 1000 / 60),
-            rounds: currentGame.roundResults
-        };
-        gameHistory.unshift(gameResult);
-        saveGameHistory();
-        updateGameHistory();
+        // IMPORTANT: Save the finished game state to Firebase BEFORE clearing local storage
+        // This ensures the visualizer can detect the game finish
+        console.log('Saving finished game state to Firebase...');
+        saveCurrentGame(); // This will sync the finished state to Firebase
         
-        // Clear current game from storage since it's finished
-        localStorage.removeItem(STORAGE_KEYS.CURRENT_GAME);
-        
-        // Show celebration screen
-        showCelebrationScreen();
+        // Wait a moment to ensure Firebase sync completes
+        setTimeout(() => {
+            // Save to history
+            const gameResult = {
+                winner: currentGame.winner,
+                scores: { ...currentGame.scores },
+                startTime: currentGame.startTime,
+                endTime: currentGame.endTime,
+                duration: Math.round((currentGame.endTime - currentGame.startTime) / 1000 / 60),
+                rounds: currentGame.roundResults,
+                players: [...players],
+                deckSize: currentDeckSize,
+                maxCards: currentGame.maxCards,
+                totalRounds: calculateTotalRounds(),
+                gameSettings: {
+                    dealerRotation: currentGame.dealerRotation,
+                    lockedPlayerCount: currentGame.lockedPlayerCount,
+                    lockedDeckSize: currentGame.lockedDeckSize
+                }
+            };
+            gameHistory.unshift(gameResult);
+            saveGameHistory();
+            updateGameHistory();
+            
+            // Clear current game from storage since it's finished
+            localStorage.removeItem(STORAGE_KEYS.CURRENT_GAME);
+            
+            // Clear Firebase session after a delay to let visualizer process the finish
+            if (firebaseInitialized && typeof GlobalGameSession !== 'undefined' && GlobalGameSession.clearSession) {
+                setTimeout(() => {
+                    GlobalGameSession.clearSession()
+                        .then(() => {
+                            console.log('Global session cleared after game finish');
+                        })
+                        .catch((error) => {
+                            console.error('Failed to clear global session:', error);
+                        });
+                }, 5000); // 5 second delay to let visualizer show celebration
+            }
+            
+            // Show celebration screen
+            showCelebrationScreen();
+        }, 1000); // 1 second delay to ensure Firebase sync
         
         return; // Don't show the round start alert
     }
@@ -2033,6 +2055,84 @@ function newGame() {
     }
 }
 
+function endGamePremature() {
+    if (!currentGame.gameStarted || players.length === 0) {
+        alert('Нет активной игры для завершения.');
+        return;
+    }
+
+    const confirmMessage = `Вы уверены, что хотите завершить игру досрочно?\n\nПобедитель будет определен по текущим очкам.\nЭто действие нельзя отменить.`;
+    
+    if (confirm(confirmMessage)) {
+        console.log('=== GAME ENDED PREMATURELY ===');
+        console.log('Current scores:', currentGame.scores);
+        
+        // End the game
+        currentGame.endTime = new Date();
+        
+        // Find the winner based on current scores
+        const finalScores = Object.values(currentGame.scores);
+        const maxScore = Math.max(...finalScores);
+        const winners = Object.keys(currentGame.scores).filter(player => currentGame.scores[player] === maxScore);
+        
+        currentGame.winner = winners.length === 1 ? winners[0] : 'Tie';
+        
+        // Add a note that game was ended prematurely
+        currentGame.prematureEnd = true;
+        currentGame.prematureEndRound = currentGame.currentRound;
+        
+        // IMPORTANT: Save the finished game state to Firebase BEFORE clearing local storage
+        console.log('Saving prematurely ended game state to Firebase...');
+        saveCurrentGame(); // This will sync the finished state to Firebase
+        
+        // Wait a moment to ensure Firebase sync completes
+        setTimeout(() => {
+            // Save to history
+            const gameResult = {
+                winner: currentGame.winner,
+                scores: { ...currentGame.scores },
+                startTime: currentGame.startTime,
+                endTime: currentGame.endTime,
+                duration: Math.round((currentGame.endTime - currentGame.startTime) / 1000 / 60),
+                rounds: currentGame.roundResults,
+                prematureEnd: true,
+                endedAtRound: currentGame.prematureEndRound,
+                players: [...players],
+                deckSize: currentDeckSize,
+                maxCards: currentGame.maxCards,
+                totalRounds: calculateTotalRounds(),
+                gameSettings: {
+                    dealerRotation: currentGame.dealerRotation,
+                    lockedPlayerCount: currentGame.lockedPlayerCount,
+                    lockedDeckSize: currentGame.lockedDeckSize
+                }
+            };
+            gameHistory.unshift(gameResult);
+            saveGameHistory();
+            updateGameHistory();
+            
+            // Clear current game from storage since it's finished
+            localStorage.removeItem(STORAGE_KEYS.CURRENT_GAME);
+            
+            // Clear Firebase session after a delay to let visualizer process the finish
+            if (firebaseInitialized && typeof GlobalGameSession !== 'undefined' && GlobalGameSession.clearSession) {
+                setTimeout(() => {
+                    GlobalGameSession.clearSession()
+                        .then(() => {
+                            console.log('Global session cleared after premature game end');
+                        })
+                        .catch((error) => {
+                            console.error('Failed to clear global session:', error);
+                        });
+                }, 5000); // 5 second delay to let visualizer show celebration
+            }
+            
+            // Show celebration screen
+            showCelebrationScreen();
+        }, 1000); // 1 second delay to ensure Firebase sync
+    }
+}
+
 function resetGame() {
     if (confirm('Сбросить все очки и начать заново?')) {
         // Clear global session if Firebase is available
@@ -2094,22 +2194,220 @@ function updateGameHistory() {
     const historyContainer = document.getElementById('gameHistory');
     historyContainer.innerHTML = '';
     
+    // Populate winner filter options
+    populateWinnerFilter();
+    
     gameHistory.forEach((game, index) => {
-        const historyItem = document.createElement('div');
-        historyItem.className = 'history-item';
-        
-        const duration = game.duration || 0;
-        const rounds = game.rounds ? game.rounds.length : 0;
-        
-        historyItem.innerHTML = `
-            <h3>Игра ${index + 1}</h3>
-            <p>Длительность: ${duration} минут | Раундов: ${rounds}</p>
-            <p>Очки: ${Object.entries(game.scores).map(([player, score]) => `${player}: ${score}`).join(', ')}</p>
-            <p>Дата: ${game.startTime.toLocaleDateString()} ${game.startTime.toLocaleTimeString()}</p>
-        `;
-        
+        const historyItem = createHistoryItem(game, index);
         historyContainer.appendChild(historyItem);
     });
+    
+    // Update statistics view
+    updateHistoryStatistics();
+}
+
+function createHistoryItem(game, index) {
+    const historyItem = document.createElement('div');
+    historyItem.className = `history-item ${game.prematureEnd ? 'premature' : 'completed'}`;
+    historyItem.onclick = () => showGameDetails(game.id || `local_${index}`);
+    
+    const duration = game.duration || 0;
+    const rounds = game.rounds ? game.rounds.length : 0;
+    const maxScore = Math.max(...Object.values(game.scores));
+    
+    // Create winner display
+    let winnerDisplay = '';
+    if (game.winner === 'Tie') {
+        const tiedPlayers = Object.keys(game.scores).filter(player => game.scores[player] === maxScore);
+        winnerDisplay = `<span class="winner-badge">Ничья: ${tiedPlayers.join(', ')}</span>`;
+    } else if (game.winner) {
+        winnerDisplay = `<span class="winner-badge">🏆 ${game.winner}</span>`;
+    }
+    
+    // Create players scores display
+    const playersScoresHtml = Object.entries(game.scores)
+        .sort(([,a], [,b]) => b - a)
+        .map(([player, score]) => `
+            <div class="player-score">
+                <span class="player-name">${player}</span>
+                <span class="score-value ${score < 0 ? 'negative' : ''}">${score >= 0 ? '+' : ''}${score}</span>
+                ${game.winner === player ? '<span class="winner-badge">👑</span>' : ''}
+            </div>
+        `).join('');
+    
+    historyItem.innerHTML = `
+        <div class="game-header">
+            <div class="game-title">
+                Игра ${index + 1} ${game.prematureEnd ? '(Досрочно завершена)' : ''}
+            </div>
+            <div class="game-date">
+                ${game.startTime.toLocaleDateString()} ${game.startTime.toLocaleTimeString()}
+            </div>
+        </div>
+        
+        <div class="game-info">
+            <div class="info-item">
+                <div class="info-label">Длительность</div>
+                <div class="info-value">${duration} мин</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Раундов</div>
+                <div class="info-value">${rounds}${game.prematureEnd ? `/${game.totalRounds || '?'}` : ''}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Игроков</div>
+                <div class="info-value">${game.players ? game.players.length : Object.keys(game.scores).length}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Лучший счет</div>
+                <div class="info-value">${maxScore}</div>
+            </div>
+        </div>
+        
+        <div class="players-scores">
+            ${playersScoresHtml}
+        </div>
+        
+        ${winnerDisplay}
+    `;
+    
+    return historyItem;
+}
+
+function populateWinnerFilter() {
+    const winnerFilter = document.getElementById('winnerFilter');
+    if (!winnerFilter) return;
+    
+    // Get unique winners
+    const winners = new Set();
+    gameHistory.forEach(game => {
+        if (game.winner && game.winner !== 'Tie') {
+            winners.add(game.winner);
+        }
+        if (game.winner === 'Tie') {
+            winners.add('Tie');
+        }
+    });
+    
+    // Clear existing options except first one
+    winnerFilter.innerHTML = '<option value="">Все победители</option>';
+    
+    // Add winner options
+    [...winners].sort().forEach(winner => {
+        const option = document.createElement('option');
+        option.value = winner;
+        option.textContent = winner === 'Tie' ? 'Ничья' : winner;
+        winnerFilter.appendChild(option);
+    });
+}
+
+function updateHistoryStatistics() {
+    const statsGrid = document.getElementById('gameStatsGrid');
+    const playerStatsSection = document.getElementById('playerStatsSection');
+    
+    if (!statsGrid || !playerStatsSection) return;
+    
+    // Calculate general statistics
+    const totalGames = gameHistory.length;
+    const prematureGames = gameHistory.filter(g => g.prematureEnd).length;
+    const completedGames = totalGames - prematureGames;
+    const averageDuration = totalGames > 0 ? 
+        gameHistory.reduce((sum, g) => sum + (g.duration || 0), 0) / totalGames : 0;
+    const totalRounds = gameHistory.reduce((sum, g) => sum + (g.rounds ? g.rounds.length : 0), 0);
+    
+    statsGrid.innerHTML = `
+        <div class="stat-card">
+            <div class="stat-title">Всего игр</div>
+            <div class="stat-value">${totalGames}</div>
+            <div class="stat-subtitle">в базе данных</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-title">Завершенных</div>
+            <div class="stat-value">${completedGames}</div>
+            <div class="stat-subtitle">${((completedGames/totalGames)*100).toFixed(1)}%</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-title">Досрочных</div>
+            <div class="stat-value">${prematureGames}</div>
+            <div class="stat-subtitle">${((prematureGames/totalGames)*100).toFixed(1)}%</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-title">Средняя длительность</div>
+            <div class="stat-value">${averageDuration.toFixed(1)}</div>
+            <div class="stat-subtitle">минут</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-title">Всего раундов</div>
+            <div class="stat-value">${totalRounds}</div>
+            <div class="stat-subtitle">сыграно</div>
+        </div>
+    `;
+    
+    // Calculate player statistics
+    const playerStats = {};
+    gameHistory.forEach(game => {
+        Object.entries(game.scores).forEach(([player, score]) => {
+            if (!playerStats[player]) {
+                playerStats[player] = {
+                    games: 0,
+                    wins: 0,
+                    totalScore: 0,
+                    bestScore: score,
+                    worstScore: score
+                };
+            }
+            
+            playerStats[player].games++;
+            playerStats[player].totalScore += score;
+            playerStats[player].bestScore = Math.max(playerStats[player].bestScore, score);
+            playerStats[player].worstScore = Math.min(playerStats[player].worstScore, score);
+            
+            if (game.winner === player) {
+                playerStats[player].wins++;
+            }
+        });
+    });
+    
+    const playerStatsHtml = Object.entries(playerStats)
+        .sort(([,a], [,b]) => b.wins - a.wins)
+        .map(([player, stats]) => `
+            <div class="player-stat-item">
+                <div class="player-stat-name">${player}</div>
+                <div class="player-stat-details">
+                    <div class="stat-detail">
+                        <span>Игр:</span>
+                        <span>${stats.games}</span>
+                    </div>
+                    <div class="stat-detail">
+                        <span>Побед:</span>
+                        <span>${stats.wins}</span>
+                    </div>
+                    <div class="stat-detail">
+                        <span>Винрейт:</span>
+                        <span>${((stats.wins/stats.games)*100).toFixed(1)}%</span>
+                    </div>
+                    <div class="stat-detail">
+                        <span>Средний счет:</span>
+                        <span>${(stats.totalScore/stats.games).toFixed(1)}</span>
+                    </div>
+                    <div class="stat-detail">
+                        <span>Лучший:</span>
+                        <span>${stats.bestScore}</span>
+                    </div>
+                    <div class="stat-detail">
+                        <span>Худший:</span>
+                        <span>${stats.worstScore}</span>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    
+    playerStatsSection.innerHTML = `
+        <h3>Статистика игроков</h3>
+        <div class="player-stats-grid">
+            ${playerStatsHtml}
+        </div>
+    `;
 }
 
 function saveGameHistory() {
@@ -3083,6 +3381,258 @@ function setField(player, field, value) {
     
     // Auto-save
     saveCurrentGame();
+}
+
+// Enhanced Game History Functions
+function searchGames() {
+    const playerSearch = document.getElementById('playerSearchInput').value.toLowerCase();
+    const winnerFilter = document.getElementById('winnerFilter').value;
+    const gameTypeFilter = document.getElementById('gameTypeFilter').value;
+    
+    let filteredGames = gameHistory;
+    
+    // Filter by player
+    if (playerSearch) {
+        filteredGames = filteredGames.filter(game => 
+            Object.keys(game.scores).some(player => 
+                player.toLowerCase().includes(playerSearch)
+            )
+        );
+    }
+    
+    // Filter by winner
+    if (winnerFilter) {
+        filteredGames = filteredGames.filter(game => game.winner === winnerFilter);
+    }
+    
+    // Filter by game type
+    if (gameTypeFilter === 'completed') {
+        filteredGames = filteredGames.filter(game => !game.prematureEnd);
+    } else if (gameTypeFilter === 'premature') {
+        filteredGames = filteredGames.filter(game => game.prematureEnd);
+    }
+    
+    // Update display with filtered games
+    const historyContainer = document.getElementById('gameHistory');
+    historyContainer.innerHTML = '';
+    
+    filteredGames.forEach((game, index) => {
+        const historyItem = createHistoryItem(game, gameHistory.indexOf(game));
+        historyContainer.appendChild(historyItem);
+    });
+    
+    // Show results count
+    const resultsCount = document.createElement('div');
+    resultsCount.className = 'search-results-info';
+    resultsCount.style.cssText = 'text-align: center; margin-bottom: 20px; color: rgba(255, 255, 255, 0.7); font-size: 0.9rem;';
+    resultsCount.textContent = `Найдено игр: ${filteredGames.length} из ${gameHistory.length}`;
+    historyContainer.insertBefore(resultsCount, historyContainer.firstChild);
+}
+
+function refreshGameHistory() {
+    // Clear filters
+    document.getElementById('playerSearchInput').value = '';
+    document.getElementById('winnerFilter').value = '';
+    document.getElementById('gameTypeFilter').value = '';
+    
+    // Reload game history from Firebase if available
+    loadGameHistory();
+}
+
+function setHistoryView(viewType) {
+    const listView = document.getElementById('historyListView');
+    const statsView = document.getElementById('historyStatsView');
+    const viewBtns = document.querySelectorAll('.view-btn');
+    
+    // Update button states
+    viewBtns.forEach(btn => {
+        btn.classList.remove('active');
+        if (btn.dataset.view === viewType) {
+            btn.classList.add('active');
+        }
+    });
+    
+    // Show/hide views
+    if (viewType === 'list') {
+        listView.classList.add('active');
+        statsView.classList.remove('active');
+    } else if (viewType === 'stats') {
+        listView.classList.remove('active');
+        statsView.classList.add('active');
+        updateHistoryStatistics(); // Refresh stats when switching to stats view
+    }
+}
+
+async function showGameDetails(gameId) {
+    let game = null;
+    
+    // Try to load from Firebase first if it's a Firebase ID
+    if (gameId.startsWith('game_') && firebaseInitialized && typeof GameHistoryDB !== 'undefined') {
+        try {
+            game = await GameHistoryDB.loadGame(gameId);
+        } catch (error) {
+            console.error('Failed to load game from Firebase:', error);
+        }
+    }
+    
+    // Fallback to local game history
+    if (!game) {
+        const gameIndex = gameId.startsWith('local_') ? 
+            parseInt(gameId.replace('local_', '')) : 
+            gameHistory.findIndex(g => g.id === gameId);
+        
+        if (gameIndex >= 0 && gameIndex < gameHistory.length) {
+            game = gameHistory[gameIndex];
+        }
+    }
+    
+    if (!game) {
+        alert('Игра не найдена');
+        return;
+    }
+    
+    populateGameDetails(game);
+    showScreen('gameDetailsScreen');
+}
+
+function populateGameDetails(game) {
+    const detailsContent = document.getElementById('gameDetailsContent');
+    
+    const duration = game.duration || 0;
+    const rounds = game.rounds ? game.rounds.length : 0;
+    const maxScore = Math.max(...Object.values(game.scores));
+    const minScore = Math.min(...Object.values(game.scores));
+    
+    // Create winner display
+    let winnerInfo = '';
+    if (game.winner === 'Tie') {
+        const tiedPlayers = Object.keys(game.scores).filter(player => game.scores[player] === maxScore);
+        winnerInfo = `Ничья между: ${tiedPlayers.join(', ')}`;
+    } else if (game.winner) {
+        winnerInfo = `Победитель: ${game.winner}`;
+    }
+    
+    // Create rounds table
+    let roundsTableHtml = '';
+    if (game.rounds && game.rounds.length > 0) {
+        const players = Object.keys(game.scores);
+        
+        roundsTableHtml = `
+            <table class="rounds-table">
+                <thead>
+                    <tr>
+                        <th>Раунд</th>
+                        <th>Карты</th>
+                        ${players.map(player => `<th>${player}</th>`).join('')}
+                    </tr>
+                </thead>
+                <tbody>
+                    ${game.rounds.map(round => `
+                        <tr>
+                            <td>${round.round}</td>
+                            <td>${round.cardsPerHand}</td>
+                            ${players.map(player => {
+                                const result = round.results.find(r => r.player === player);
+                                return `<td>${result ? `${result.bid}/${result.tricks} (${result.points >= 0 ? '+' : ''}${result.points})` : '-'}</td>`;
+                            }).join('')}
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
+    }
+    
+    detailsContent.innerHTML = `
+        <div class="details-header">
+            <div class="details-title">
+                Детали игры ${game.prematureEnd ? '(Досрочно завершена)' : ''}
+            </div>
+            <div class="details-subtitle">
+                ${game.startTime.toLocaleDateString()} ${game.startTime.toLocaleTimeString()} - ${game.endTime ? game.endTime.toLocaleDateString() + ' ' + game.endTime.toLocaleTimeString() : 'В процессе'}
+            </div>
+        </div>
+        
+        <div class="details-sections">
+            <div class="details-section">
+                <div class="section-title">Общая информация</div>
+                <div class="game-info">
+                    <div class="info-item">
+                        <div class="info-label">Длительность</div>
+                        <div class="info-value">${duration} минут</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Раундов сыграно</div>
+                        <div class="info-value">${rounds}${game.prematureEnd && game.totalRounds ? ` / ${game.totalRounds}` : ''}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Игроков</div>
+                        <div class="info-value">${Object.keys(game.scores).length}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Размер колоды</div>
+                        <div class="info-value">${game.deckSize || 36}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Лучший счет</div>
+                        <div class="info-value">${maxScore}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Худший счет</div>
+                        <div class="info-value">${minScore}</div>
+                    </div>
+                </div>
+                ${game.prematureEnd ? `<p style="color: #ff9800; margin-top: 15px; text-align: center;">⚠️ Игра была завершена досрочно на раунде ${game.endedAtRound || 'неизвестно'}</p>` : ''}
+            </div>
+            
+            <div class="details-section">
+                <div class="section-title">Результаты и победитель</div>
+                <div class="players-scores" style="justify-content: center; margin-bottom: 20px;">
+                    ${Object.entries(game.scores)
+                        .sort(([,a], [,b]) => b - a)
+                        .map(([player, score]) => `
+                            <div class="player-score" style="font-size: 1.1rem; padding: 10px 15px;">
+                                <span class="player-name">${player}</span>
+                                <span class="score-value ${score < 0 ? 'negative' : ''}">${score >= 0 ? '+' : ''}${score}</span>
+                                ${game.winner === player ? '<span class="winner-badge">👑 Победитель</span>' : ''}
+                            </div>
+                        `).join('')}
+                </div>
+                <div style="text-align: center; font-size: 1.2rem; color: #667eea; font-weight: 600;">
+                    ${winnerInfo}
+                </div>
+            </div>
+            
+            ${roundsTableHtml ? `
+                <div class="details-section">
+                    <div class="section-title">Подробности раундов</div>
+                    <p style="color: rgba(255, 255, 255, 0.7); margin-bottom: 15px; text-align: center;">
+                        Формат: Ставка/Взятки (Очки за раунд)
+                    </p>
+                    ${roundsTableHtml}
+                </div>
+            ` : ''}
+            
+            ${game.gameSettings ? `
+                <div class="details-section">
+                    <div class="section-title">Настройки игры</div>
+                    <div class="game-info">
+                        <div class="info-item">
+                            <div class="info-label">Ротация дилера</div>
+                            <div class="info-value">${game.gameSettings.dealerRotation ? 'Включена' : 'Отключена'}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Заблокировано игроков</div>
+                            <div class="info-value">${game.gameSettings.lockedPlayerCount || 'Не заблокировано'}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Размер колоды</div>
+                            <div class="info-value">${game.gameSettings.lockedDeckSize || game.deckSize || 36}</div>
+                        </div>
+                    </div>
+                </div>
+            ` : ''}
+        </div>
+    `;
 }
 
 // Update field button states (enable/disable based on min/max values)

@@ -162,3 +162,4 @@ For issues or questions about the player management system:
 2. Verify Firebase configuration
 3. Test with `test-player-management.html`
 4. Check this documentation for common solutions
+

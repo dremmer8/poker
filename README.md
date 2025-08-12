@@ -29,7 +29,7 @@ The game consists of 6 stages with different scoring rules:
 - Same scoring as Stage 1
 
 #### Stage 6 (Blind Stage - Max cards)
-- Same scoring as Stage 1
+- Same scoring as Stages 2, 3, 4 (normal scoring rules)
 
 ### Bidding Rules
 - **Total Bidding Cap**: Players × Cards per hand

@@ -316,8 +316,308 @@ function generateDeviceId() {
     return deviceId;
 }
 
+// Game History Database Management
+const GameHistoryDB = {
+    // Save a completed game to the database
+    async saveGame(gameData) {
+        if (!db) {
+            console.error('Firebase not initialized');
+            return null;
+        }
+        
+        try {
+            // Create a comprehensive game record
+            const gameRecord = {
+                // Basic game info
+                winner: gameData.winner,
+                scores: gameData.scores,
+                startTime: gameData.startTime,
+                endTime: gameData.endTime,
+                duration: gameData.duration,
+                
+                // Game details
+                players: gameData.players || Object.keys(gameData.scores || {}),
+                totalRounds: gameData.rounds ? gameData.rounds.length : 0,
+                roundResults: gameData.rounds || [],
+                
+                // Game settings
+                deckSize: gameData.deckSize || 36,
+                maxCards: gameData.maxCards,
+                
+                // Special flags
+                prematureEnd: gameData.prematureEnd || false,
+                endedAtRound: gameData.endedAtRound,
+                
+                // Metadata
+                gameId: generateGameId(),
+                deviceId: generateDeviceId(),
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                
+                // Statistics
+                stats: this.calculateGameStats(gameData)
+            };
+            
+            // Add to games collection
+            const docRef = await db.collection('gameHistory').add(gameRecord);
+            console.log('Game saved to Firebase with ID:', docRef.id);
+            
+            // Update player statistics
+            await this.updatePlayerStats(gameRecord);
+            
+            return docRef.id;
+        } catch (error) {
+            console.error('Error saving game to Firebase:', error);
+            return null;
+        }
+    },
+    
+    // Load all games from the database
+    async loadGames(limit = 50) {
+        if (!db) {
+            console.error('Firebase not initialized');
+            return [];
+        }
+        
+        try {
+            const snapshot = await db.collection('gameHistory')
+                .orderBy('createdAt', 'desc')
+                .limit(limit)
+                .get();
+            
+            const games = [];
+            snapshot.forEach(doc => {
+                const gameData = doc.data();
+                
+                // Convert Firestore timestamps to Date objects
+                if (gameData.startTime && gameData.startTime.toDate) {
+                    gameData.startTime = gameData.startTime.toDate();
+                }
+                if (gameData.endTime && gameData.endTime.toDate) {
+                    gameData.endTime = gameData.endTime.toDate();
+                }
+                if (gameData.createdAt && gameData.createdAt.toDate) {
+                    gameData.createdAt = gameData.createdAt.toDate();
+                }
+                
+                games.push({
+                    id: doc.id,
+                    ...gameData
+                });
+            });
+            
+            console.log(`Loaded ${games.length} games from Firebase`);
+            return games;
+        } catch (error) {
+            console.error('Error loading games from Firebase:', error);
+            return [];
+        }
+    },
+    
+    // Load a specific game by ID
+    async loadGame(gameId) {
+        if (!db) {
+            console.error('Firebase not initialized');
+            return null;
+        }
+        
+        try {
+            const doc = await db.collection('gameHistory').doc(gameId).get();
+            
+            if (doc.exists) {
+                const gameData = doc.data();
+                
+                // Convert timestamps
+                if (gameData.startTime && gameData.startTime.toDate) {
+                    gameData.startTime = gameData.startTime.toDate();
+                }
+                if (gameData.endTime && gameData.endTime.toDate) {
+                    gameData.endTime = gameData.endTime.toDate();
+                }
+                if (gameData.createdAt && gameData.createdAt.toDate) {
+                    gameData.createdAt = gameData.createdAt.toDate();
+                }
+                
+                return {
+                    id: doc.id,
+                    ...gameData
+                };
+            }
+            
+            return null;
+        } catch (error) {
+            console.error('Error loading game:', error);
+            return null;
+        }
+    },
+    
+    // Search games by various criteria
+    async searchGames(criteria = {}) {
+        if (!db) {
+            console.error('Firebase not initialized');
+            return [];
+        }
+        
+        try {
+            let query = db.collection('gameHistory');
+            
+            // Add filters based on criteria
+            if (criteria.player) {
+                query = query.where('players', 'array-contains', criteria.player);
+            }
+            
+            if (criteria.winner) {
+                query = query.where('winner', '==', criteria.winner);
+            }
+            
+            if (criteria.prematureEnd !== undefined) {
+                query = query.where('prematureEnd', '==', criteria.prematureEnd);
+            }
+            
+            if (criteria.startDate) {
+                query = query.where('startTime', '>=', criteria.startDate);
+            }
+            
+            if (criteria.endDate) {
+                query = query.where('startTime', '<=', criteria.endDate);
+            }
+            
+            // Order by creation time (most recent first)
+            query = query.orderBy('createdAt', 'desc');
+            
+            // Apply limit
+            if (criteria.limit) {
+                query = query.limit(criteria.limit);
+            }
+            
+            const snapshot = await query.get();
+            const games = [];
+            
+            snapshot.forEach(doc => {
+                const gameData = doc.data();
+                
+                // Convert timestamps
+                if (gameData.startTime && gameData.startTime.toDate) {
+                    gameData.startTime = gameData.startTime.toDate();
+                }
+                if (gameData.endTime && gameData.endTime.toDate) {
+                    gameData.endTime = gameData.endTime.toDate();
+                }
+                if (gameData.createdAt && gameData.createdAt.toDate) {
+                    gameData.createdAt = gameData.createdAt.toDate();
+                }
+                
+                games.push({
+                    id: doc.id,
+                    ...gameData
+                });
+            });
+            
+            return games;
+        } catch (error) {
+            console.error('Error searching games:', error);
+            return [];
+        }
+    },
+    
+    // Get player statistics
+    async getPlayerStats(playerName) {
+        if (!db) {
+            console.error('Firebase not initialized');
+            return null;
+        }
+        
+        try {
+            const doc = await db.collection('playerStats').doc(playerName).get();
+            
+            if (doc.exists) {
+                return doc.data();
+            }
+            
+            return null;
+        } catch (error) {
+            console.error('Error getting player stats:', error);
+            return null;
+        }
+    },
+    
+    // Update player statistics after a game
+    async updatePlayerStats(gameRecord) {
+        if (!db || !gameRecord.players) {
+            return;
+        }
+        
+        try {
+            const batch = db.batch();
+            
+            for (const player of gameRecord.players) {
+                const statsRef = db.collection('playerStats').doc(player);
+                const playerScore = gameRecord.scores[player] || 0;
+                const isWinner = gameRecord.winner === player || (gameRecord.winner === 'Tie' && playerScore === Math.max(...Object.values(gameRecord.scores)));
+                
+                // Update player statistics
+                batch.set(statsRef, {
+                    totalGames: firebase.firestore.FieldValue.increment(1),
+                    totalWins: firebase.firestore.FieldValue.increment(isWinner ? 1 : 0),
+                    totalScore: firebase.firestore.FieldValue.increment(playerScore),
+                    totalRounds: firebase.firestore.FieldValue.increment(gameRecord.totalRounds),
+                    prematureEndGames: firebase.firestore.FieldValue.increment(gameRecord.prematureEnd ? 1 : 0),
+                    lastPlayed: firebase.firestore.FieldValue.serverTimestamp(),
+                    bestScore: playerScore, // This will need special handling for actual max
+                    averageScore: 0 // Will be calculated separately
+                }, { merge: true });
+            }
+            
+            await batch.commit();
+            console.log('Player statistics updated');
+        } catch (error) {
+            console.error('Error updating player stats:', error);
+        }
+    },
+    
+    // Calculate comprehensive game statistics
+    calculateGameStats(gameData) {
+        const scores = Object.values(gameData.scores || {});
+        const players = Object.keys(gameData.scores || {});
+        
+        return {
+            playerCount: players.length,
+            totalScore: scores.reduce((sum, score) => sum + score, 0),
+            averageScore: scores.length > 0 ? scores.reduce((sum, score) => sum + score, 0) / scores.length : 0,
+            highestScore: Math.max(...scores, 0),
+            lowestScore: Math.min(...scores, 0),
+            scoreSpread: Math.max(...scores, 0) - Math.min(...scores, 0),
+            roundsCompleted: gameData.rounds ? gameData.rounds.length : 0,
+            completionRate: gameData.prematureEnd ? 
+                (gameData.endedAtRound || 1) / (gameData.totalRounds || 1) : 1.0
+        };
+    },
+    
+    // Delete a game (admin function)
+    async deleteGame(gameId) {
+        if (!db) {
+            console.error('Firebase not initialized');
+            return false;
+        }
+        
+        try {
+            await db.collection('gameHistory').doc(gameId).delete();
+            console.log('Game deleted from Firebase');
+            return true;
+        } catch (error) {
+            console.error('Error deleting game:', error);
+            return false;
+        }
+    }
+};
+
+// Generate unique game ID
+function generateGameId() {
+    return 'game_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+}
+
 // Export for use in main script
 window.GlobalGameSession = GlobalGameSession;
 window.initializeFirebase = initializeFirebase;
 window.PlayerDatabase = PlayerDatabase;
 window.ImageStorage = ImageStorage;
+window.GameHistoryDB = GameHistoryDB;

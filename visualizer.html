@@ -45,10 +45,6 @@
             </div>
             
             <div class="header-right">
-                <div class="game-time">
-                    <span class="time-label">Время игры</span>
-                    <span class="time-value" id="gameTime">00:00</span>
-                </div>
             </div>
         </header>
 
@@ -64,16 +60,12 @@
             <!-- Game Statistics -->
             <section class="stats-section">
                 <div class="stats-container">
-                    <div class="stat-card">
-                        <h3>Общие ставки</h3>
-                        <div class="stat-value" id="totalBids">0</div>
-                        <div class="stat-max">/ <span id="maxBids">0</span></div>
-                    </div>
-                    
-                    <div class="stat-card">
-                        <h3>Общие взятки</h3>
-                        <div class="stat-value" id="totalTricks">0</div>
-                        <div class="stat-max">/ <span id="maxTricks">0</span></div>
+                    <div class="stat-card" id="bidValidationCard">
+                        <h3>Валидация ставок</h3>
+                        <div class="bid-validation">
+                            <div class="validation-number" id="validationNumber">0</div>
+                            <div class="validation-label" id="validationLabel">недопустимо</div>
+                        </div>
                     </div>
                     
                     <div class="stat-card">

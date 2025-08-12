@@ -8,6 +8,7 @@ class PokerVisualizer {
         this.gameTimer = null;
         this.firebaseInitialized = false;
         this.updateInterval = null;
+        this.celebrationShowing = false;
         
         this.initialize();
     }
@@ -96,6 +97,8 @@ class PokerVisualizer {
             // Keep previous round to detect transitions
             const prevRound = this.currentGame ? (this.currentGame.currentRound || 0) : 0;
             const prevPhase = this.currentGame ? (this.currentGame.currentPhase || this.currentGame.currentRoundData?.phase || '') : '';
+            const prevGameFinished = this.currentGame ? (this.currentGame.endTime || this.currentGame.winner) : false;
+            const prevGameStartTime = this.currentGame ? this.currentGame.startTime : null;
 
             // Extract game data
             if (gameData.currentGame) {
@@ -106,10 +109,23 @@ class PokerVisualizer {
                 this.players = gameData.players || [];
             }
 
+            // Detect new game start (different start time or new game after celebration)
+            const currentGameStartTime = this.currentGame ? this.currentGame.startTime : null;
+            const isNewGame = (prevGameStartTime && currentGameStartTime && 
+                             new Date(prevGameStartTime).getTime() !== new Date(currentGameStartTime).getTime()) ||
+                            (this.celebrationShowing && !prevGameFinished && this.currentGame && !this.currentGame.endTime && !this.currentGame.winner);
+            
+            if (isNewGame) {
+                this.hideGameCelebration();
+            }
+
             // Set game start time if not set
             if (!this.gameStartTime && this.currentGame.startTime) {
                 this.gameStartTime = new Date(this.currentGame.startTime);
             }
+
+            // Detect game finish
+            this.maybeShowGameFinished(prevGameFinished);
 
             // Detect announcements
             this.maybeShowBiddingComplete(prevPhase);
@@ -131,6 +147,10 @@ class PokerVisualizer {
         this.currentGame = null;
         this.players = [];
         this.gameStartTime = null;
+        
+        // Hide celebration screen when game data is cleared (session ended)
+        this.hideGameCelebration();
+        
         this.updateUI();
     }
     
@@ -148,14 +168,7 @@ class PokerVisualizer {
     }
     
     updateGameTime() {
-        const gameTimeElement = document.getElementById('gameTime');
-        if (gameTimeElement && this.gameStartTime) {
-            const now = new Date();
-            const elapsed = Math.floor((now - this.gameStartTime) / 1000);
-            const minutes = Math.floor(elapsed / 60);
-            const seconds = elapsed % 60;
-            gameTimeElement.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-        }
+        // Game time display removed - keeping method empty to avoid errors
     }
     
     updateUI() {
@@ -221,14 +234,15 @@ class PokerVisualizer {
         const tricks = this.getPlayerTricks(player) || 0;
         const score = this.getPlayerScore(player) || 0;
         
-        // Get player image if available
-        const playerImage = this.getPlayerImage(player);
+        // Get bid intensity for avatar animation
+        const bidIntensityClass = this.getBidIntensityClass(bid);
         
+        // Create player card without image first
         playerCard.innerHTML = `
             ${this.currentGame && this.getCurrentDealer() === player ? '<div class="dealer-label">Раздающий</div>' : ''}
             <div class="player-name">${player}</div>
-            <div class="player-avatar ${this.currentGame && this.getCurrentDealer() === player ? 'dealer' : ''} ${this.currentGame && this.isPlayerBlindBidding(player) ? 'blind-bidding' : ''}">
-                ${playerImage ? `<img src="${playerImage}" alt="${player}" class="player-avatar-img">` : ''}
+            <div class="player-avatar ${this.currentGame && this.getCurrentDealer() === player ? 'dealer' : ''} ${this.currentGame && this.isPlayerBlindBidding(player) ? 'blind-bidding' : ''} ${bidIntensityClass}">
+                <!-- Image will be loaded asynchronously -->
             </div>
             <div class="player-stats">
                 <div class="stat-item">
@@ -246,18 +260,58 @@ class PokerVisualizer {
             </div>
         `;
         
+        // Load player image asynchronously
+        this.loadPlayerImageAsync(player, playerCard);
+        
         return playerCard;
+    }
+    
+    // Determine bid intensity class based on bid amount
+    getBidIntensityClass(bid) {
+        // No animation for bid of 0
+        if (bid === 0) {
+            return '';
+        }
+        
+        // Get maximum possible bid (cards per hand) for relative scaling
+        const maxBid = this.currentGame?.cardsPerHand || 10;
+        const bidRatio = bid / maxBid;
+        
+        // Also consider absolute bid values for dramatic effect
+        if (bid >= 10) {
+            return 'bid-insane';
+        } else if (bid >= 8) {
+            return 'bid-extreme';
+        } else if (bid >= 6) {
+            return 'bid-very-high';
+        } else if (bid >= 4) {
+            return 'bid-high';
+        } else if (bid >= 2) {
+            return 'bid-medium';
+        } else if (bid >= 1) {
+            return 'bid-low';
+        }
+        
+        return '';
     }
     
     updateStats() {
         // Update bid validation
         this.updateBidValidation();
         
+        // Update total bids and max bids
+        this.updateTotalBidsDisplay();
+        
         // Update current dealer
         const dealerElement = document.getElementById('currentDealer');
         if (dealerElement) {
             dealerElement.textContent = this.getCurrentDealer() || '-';
         }
+    }
+    
+    updateTotalBidsDisplay() {
+        // This method is no longer needed since we removed the total bids/tricks display cards
+        // Keeping it empty in case it's called elsewhere to avoid errors
     }
     
     updateBidValidation() {
@@ -397,6 +451,16 @@ class PokerVisualizer {
             overlay.classList.remove('animate');
             setTimeout(() => overlay.classList.remove('show'), 400);
         }, 5000);
+    }
+
+    maybeShowGameFinished(prevGameFinished) {
+        const gameFinished = this.currentGame?.endTime || this.currentGame?.winner;
+        
+        // Only show if game just finished (wasn't finished before, but is now)
+        if (!prevGameFinished && gameFinished) {
+            console.log('Game finished detected, showing celebration screen');
+            this.showGameCelebration();
+        }
     }
 
     maybeShowNextRound(prevRound) {
@@ -636,6 +700,172 @@ class PokerVisualizer {
         }
     }
     
+    showGameCelebration() {
+        const overlay = document.getElementById('gameCelebrationOverlay');
+        if (!overlay) {
+            // Create the celebration overlay if it doesn't exist
+            this.createCelebrationOverlay();
+        }
+        
+        this.populateCelebrationScreen();
+        
+        const celebrationOverlay = document.getElementById('gameCelebrationOverlay');
+        if (celebrationOverlay) {
+            celebrationOverlay.classList.add('show');
+            setTimeout(() => celebrationOverlay.classList.add('animate'), 100);
+            
+            // Mark that celebration is showing (no auto-hide, permanent until new game)
+            this.celebrationShowing = true;
+            console.log('Game celebration screen is now showing permanently until next game starts');
+        }
+    }
+    
+    hideGameCelebration() {
+        if (this.celebrationShowing) {
+            const celebrationOverlay = document.getElementById('gameCelebrationOverlay');
+            if (celebrationOverlay && celebrationOverlay.classList.contains('show')) {
+                console.log('Hiding game celebration screen - new game detected');
+                celebrationOverlay.classList.remove('animate');
+                setTimeout(() => {
+                    celebrationOverlay.classList.remove('show');
+                    this.celebrationShowing = false;
+                }, 400);
+            } else {
+                this.celebrationShowing = false;
+            }
+        }
+    }
+
+    createCelebrationOverlay() {
+        const overlay = document.createElement('div');
+        overlay.id = 'gameCelebrationOverlay';
+        overlay.className = 'announcement-overlay game-celebration';
+        
+        overlay.innerHTML = `
+            <div class="announcement-content celebration-content">
+                <div class="celebration-header">
+                    <div class="celebration-icon">🏆</div>
+                    <h2 id="celebrationTitle">Игра завершена!</h2>
+                </div>
+                
+                <div class="winner-showcase" id="winnerShowcase">
+                    <!-- Winner will be populated here -->
+                </div>
+                
+                <div class="final-scores-section">
+                    <h3>Финальные результаты</h3>
+                    <div class="final-scores-grid" id="finalScoresGrid">
+                        <!-- Final scores will be populated here -->
+                    </div>
+                </div>
+                
+                <div class="game-stats-section">
+                    <h3>Статистика игры</h3>
+                    <div class="game-stats-grid" id="gameStatsGrid">
+                        <!-- Game stats will be populated here -->
+                    </div>
+                </div>
+                
+                <div class="celebration-close">
+                    <div class="celebration-info">
+                        🎮 Экран будет скрыт автоматически при запуске новой игры
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(overlay);
+    }
+
+    populateCelebrationScreen() {
+        if (!this.currentGame || !this.players) return;
+        
+        // Determine winner(s)
+        const finalScores = Object.values(this.currentGame.scores || {});
+        const maxScore = Math.max(...finalScores);
+        const winners = Object.keys(this.currentGame.scores || {}).filter(player => 
+            this.currentGame.scores[player] === maxScore
+        );
+        
+        // Update title and winner showcase
+        const title = document.getElementById('celebrationTitle');
+        const winnerShowcase = document.getElementById('winnerShowcase');
+        
+        // Check if game was ended prematurely
+        const prematureEndMessage = this.currentGame.prematureEnd ? 
+            `<div class="premature-end-notice">🏁 Игра завершена досрочно на раунде ${this.currentGame.prematureEndRound}</div>` : '';
+        
+        if (title && winnerShowcase) {
+            if (winners.length === 1) {
+                title.textContent = this.currentGame.prematureEnd ? 
+                    '🏁 Игра завершена досрочно!' : '🏆 У нас есть победитель!';
+                winnerShowcase.innerHTML = `
+                    <div class="winner-card ${this.currentGame.prematureEnd ? 'premature' : ''}">
+                        <div class="winner-crown">${this.currentGame.prematureEnd ? '🏁' : '👑'}</div>
+                        <div class="winner-name">${winners[0]}</div>
+                        <div class="winner-score">${maxScore} очков</div>
+                        <div class="winner-message">${this.currentGame.prematureEnd ? 'Победитель по текущим очкам!' : 'Поздравляем с победой!'}</div>
+                        ${prematureEndMessage}
+                    </div>
+                `;
+            } else {
+                title.textContent = this.currentGame.prematureEnd ? 
+                    '🏁 Игра завершена досрочно!' : '🤝 Ничья!';
+                winnerShowcase.innerHTML = `
+                    <div class="winner-card tie ${this.currentGame.prematureEnd ? 'premature' : ''}">
+                        <div class="winner-crown">${this.currentGame.prematureEnd ? '🏁' : '🤝'}</div>
+                        <div class="winner-name">${winners.join(' & ')}</div>
+                        <div class="winner-score">${maxScore} очков</div>
+                        <div class="winner-message">${this.currentGame.prematureEnd ? 'Ничья по текущим очкам!' : 'Отличная игра!'}</div>
+                        ${prematureEndMessage}
+                    </div>
+                `;
+            }
+        }
+        
+        // Populate final scores
+        const finalScoresGrid = document.getElementById('finalScoresGrid');
+        if (finalScoresGrid) {
+            const sortedPlayers = Object.entries(this.currentGame.scores || {})
+                .sort(([,a], [,b]) => b - a);
+            
+            finalScoresGrid.innerHTML = sortedPlayers.map(([player, score], index) => `
+                <div class="final-score-player ${score === maxScore ? 'winner-player' : ''} ${index === 0 ? 'first-place' : index === 1 ? 'second-place' : index === 2 ? 'third-place' : ''}">
+                    <div class="player-rank">${index + 1}</div>
+                    <div class="player-name">${player}</div>
+                    <div class="player-final-score">${score}</div>
+                </div>
+            `).join('');
+        }
+        
+        // Populate game stats
+        const gameStatsGrid = document.getElementById('gameStatsGrid');
+        if (gameStatsGrid && this.currentGame) {
+            const totalRounds = this.currentGame.roundResults ? this.currentGame.roundResults.length : 0;
+            const gameDuration = this.currentGame.startTime && this.currentGame.endTime ? 
+                Math.round((new Date(this.currentGame.endTime) - new Date(this.currentGame.startTime)) / 1000 / 60) : 0;
+            
+            gameStatsGrid.innerHTML = `
+                <div class="stat-item">
+                    <div class="stat-value">${totalRounds}</div>
+                    <div class="stat-label">Раундов сыграно</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">${this.players.length}</div>
+                    <div class="stat-label">Игроков</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">${gameDuration}м</div>
+                    <div class="stat-label">Длительность</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">${maxScore}</div>
+                    <div class="stat-label">Лучший счет</div>
+                </div>
+            `;
+        }
+    }
+
     // Cleanup method
     destroy() {
         if (this.updateInterval) {
@@ -683,6 +913,21 @@ class PokerVisualizer {
         
         const imagePromises = this.players.map(player => this.getPlayerImage(player));
         await Promise.allSettled(imagePromises);
+    }
+    
+    // Load player image asynchronously and update the avatar
+    async loadPlayerImageAsync(playerName, playerCard) {
+        try {
+            const imageUrl = await this.getPlayerImage(playerName);
+            if (imageUrl) {
+                const avatarDiv = playerCard.querySelector('.player-avatar');
+                if (avatarDiv) {
+                    avatarDiv.innerHTML = `<img src="${imageUrl}" alt="${playerName}" class="player-avatar-img">`;
+                }
+            }
+        } catch (error) {
+            console.warn(`Failed to load image for player ${playerName}:`, error);
+        }
     }
 }
 

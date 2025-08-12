@@ -301,6 +301,7 @@
 
             <div class="game-controls">
                 <button class="show-table-btn" onclick="showGameTable()">Показать таблицу</button>
+                <button class="end-game-btn" onclick="endGamePremature()" title="Завершить игру досрочно и определить победителя по текущим очкам">🏁 Завершить игру</button>
                 <button class="back-to-menu-btn" onclick="showMenu()">← Назад в меню</button>
             </div>
         </div>
@@ -348,14 +349,61 @@
             </header>
 
             <div class="game-history">
-                <h2>История игр (Game History)</h2>
-                <div class="history-list" id="gameHistory">
-                    <!-- Game history will be populated by JavaScript -->
+                <div class="history-controls">
+                    <div class="search-filters">
+                        <input type="text" id="playerSearchInput" placeholder="Поиск по игроку..." class="search-input">
+                        <select id="winnerFilter" class="filter-select">
+                            <option value="">Все победители</option>
+                        </select>
+                        <select id="gameTypeFilter" class="filter-select">
+                            <option value="">Все игры</option>
+                            <option value="completed">Завершенные</option>
+                            <option value="premature">Досрочные</option>
+                        </select>
+                        <button class="search-btn" onclick="searchGames()">🔍 Поиск</button>
+                        <button class="refresh-btn" onclick="refreshGameHistory()">🔄 Обновить</button>
+                    </div>
+                    
+                    <div class="view-controls">
+                        <button class="view-btn active" onclick="setHistoryView('list')" data-view="list">📋 Список</button>
+                        <button class="view-btn" onclick="setHistoryView('stats')" data-view="stats">📊 Статистика</button>
+                    </div>
+                </div>
+
+                <div class="history-content">
+                    <div id="historyListView" class="history-view active">
+                        <div class="history-list" id="gameHistory">
+                            <!-- Game history will be populated by JavaScript -->
+                        </div>
+                    </div>
+                    
+                    <div id="historyStatsView" class="history-view">
+                        <div class="stats-grid" id="gameStatsGrid">
+                            <!-- Statistics will be populated by JavaScript -->
+                        </div>
+                        
+                        <div class="player-stats" id="playerStatsSection">
+                            <!-- Player statistics will be populated by JavaScript -->
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <!-- Screen 6: Game Celebration -->
+        <!-- Screen 6: Game Details -->
+        <div id="gameDetailsScreen" class="screen">
+            <header>
+                <h1>Детали игры</h1>
+                <p>Подробная информация об игре</p>
+                <button class="back-btn" onclick="showGameHistory()">← Назад к истории</button>
+            </header>
+
+            <div class="game-details-content" id="gameDetailsContent">
+                <!-- Game details will be populated by JavaScript -->
+            </div>
+        </div>
+
+        <!-- Screen 7: Game Celebration -->
         <div id="celebrationScreen" class="screen">
             <header>
                 <h1>🎉 Игра завершена!</h1>
@@ -395,7 +443,7 @@
             </div>
         </div>
 
-        <!-- Screen 7: Round Transition -->
+        <!-- Screen 8: Round Transition -->
         <div id="transitionScreen" class="screen">
             <div class="transition-container">
                 <div class="transition-content">
